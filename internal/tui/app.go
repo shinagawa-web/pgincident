@@ -1,0 +1,193 @@
+package tui
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/shinagawa-web/pgincident/internal/core"
+	"github.com/shinagawa-web/pgincident/internal/version"
+)
+
+type snapshotMsg core.PollResult
+
+// App is the root Bubble Tea model.
+type App struct {
+	poller    *core.Poller
+	pollCh    chan core.PollResult
+	cancel    context.CancelFunc
+	snapshot  core.Snapshot
+	section   Section
+	cursor    [sectionCount]int
+	width     int
+	height    int
+	lastErr   error
+	statusMsg string
+	showHelp  bool
+	quitting  bool
+}
+
+func New(poller *core.Poller) *App {
+	ctx, cancel := context.WithCancel(context.Background())
+	ch := make(chan core.PollResult, 1)
+	go poller.Run(ctx, ch)
+	return &App{
+		poller: poller,
+		pollCh: ch,
+		cancel: cancel,
+	}
+}
+
+func (a *App) Init() tea.Cmd {
+	return waitForSnapshot(a.pollCh)
+}
+
+func waitForSnapshot(ch <-chan core.PollResult) tea.Cmd {
+	return func() tea.Msg { return snapshotMsg(<-ch) }
+}
+
+func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		a.width, a.height = msg.Width, msg.Height
+	case snapshotMsg:
+		if msg.Err != nil {
+			a.lastErr = msg.Err
+		} else {
+			a.snapshot = msg.Snapshot
+			a.lastErr = nil
+		}
+		return a, waitForSnapshot(a.pollCh)
+	case tea.KeyMsg:
+		return a.handleKey(msg)
+	}
+	return a, nil
+}
+
+func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if a.showHelp {
+		a.showHelp = false
+		return a, nil
+	}
+
+	switch msg.String() {
+	case "q", "ctrl+c":
+		a.quitting = true
+		a.cancel()
+		return a, tea.Quit
+	case "?":
+		a.showHelp = true
+	case "tab":
+		a.section = a.section.next()
+		a.statusMsg = ""
+	case "shift+tab":
+		a.section = a.section.prev()
+		a.statusMsg = ""
+	case "up", "k":
+		a.moveCursor(-1)
+	case "down", "j":
+		a.moveCursor(1)
+	case "+":
+		a.poller.SetInterval(a.poller.Interval() + 500*time.Millisecond)
+		a.statusMsg = fmt.Sprintf("interval: %.1fs", a.poller.Interval().Seconds())
+	case "-":
+		d := a.poller.Interval() - 500*time.Millisecond
+		if d < 500*time.Millisecond {
+			d = 500 * time.Millisecond
+		}
+		a.poller.SetInterval(d)
+		a.statusMsg = fmt.Sprintf("interval: %.1fs", a.poller.Interval().Seconds())
+	}
+	return a, nil
+}
+
+func (a *App) moveCursor(delta int) {
+	n := a.sectionLen()
+	if n == 0 {
+		return
+	}
+	c := a.cursor[a.section] + delta
+	if c < 0 {
+		c = 0
+	} else if c >= n {
+		c = n - 1
+	}
+	a.cursor[a.section] = c
+}
+
+func (a *App) sectionLen() int {
+	switch a.section {
+	case SectionActivity:
+		return len(a.snapshot.Activities)
+	case SectionLocks:
+		return len(a.snapshot.Locks)
+	case SectionIdle:
+		return len(a.snapshot.IdleInTx)
+	}
+	return 0
+}
+
+// sectionDataRows returns the number of data rows each section can display.
+func (a *App) sectionDataRows() int {
+	// fixed rows: titleBar(1) + statsBar(1) + 4×divider(4) + statusBar(1) + footer(1) = 8
+	// per section overhead: sectionTitle(1) + colHeader(1) = 2 → 3 sections = 6
+	rows := (a.height - 8 - 6) / 3
+	if rows < 3 {
+		return 3
+	}
+	return rows
+}
+
+func (a *App) View() string {
+	if a.quitting {
+		return ""
+	}
+	if a.width == 0 {
+		return "loading…"
+	}
+	if a.width < 80 || a.height < 24 {
+		msg := fmt.Sprintf("Terminal too small (%d×%d).\nResize to at least 80×24.", a.width, a.height)
+		return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
+			warnStyle.Render(msg))
+	}
+
+	if a.showHelp {
+		return a.renderHelp()
+	}
+
+	div := dimStyle.Render(strings.Repeat("─", a.width))
+	dr := a.sectionDataRows()
+
+	parts := []string{
+		renderTitleBar(a.snapshot, a.poller.Interval(), a.width),
+		renderStatsBar(a.snapshot.DBStats, a.width),
+		div,
+		renderActivitySection(a.snapshot.Activities, a.cursor[SectionActivity], a.section == SectionActivity, dr, a.width),
+		div,
+		renderLocksSection(a.snapshot.Locks, a.cursor[SectionLocks], a.section == SectionLocks, dr, a.width),
+		div,
+		renderIdleSection(a.snapshot.IdleInTx, a.cursor[SectionIdle], a.section == SectionIdle, dr, a.width),
+		div,
+		renderStatus(a.lastErr, a.statusMsg),
+		renderFooter(),
+	}
+
+	return strings.Join(parts, "\n")
+}
+
+func (a *App) renderHelp() string {
+	content := boldStyle.Render("pgincident v"+version.Version) + "\n\n" +
+		"  q / Ctrl-C    quit\n" +
+		"  Tab           next section\n" +
+		"  Shift-Tab     previous section\n" +
+		"  ↑ / k         cursor up\n" +
+		"  ↓ / j         cursor down\n" +
+		"  + / -         increase / decrease interval\n" +
+		"  ?             this help\n\n" +
+		dimStyle.Render("press any key to close")
+	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
+		modalStyle.Render(content))
+}
