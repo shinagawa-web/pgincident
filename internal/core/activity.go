@@ -28,8 +28,8 @@ SELECT
     COALESCE(usename, ''),
     COALESCE(datname, ''),
     state,
-    COALESCE(xact_start, now()),
-    now() - COALESCE(xact_start, now()),
+    xact_start,
+    now() - xact_start,
     left(COALESCE(query, ''), 200),
     COALESCE(application_name, ''),
     COALESCE(client_addr::text, '(local)')

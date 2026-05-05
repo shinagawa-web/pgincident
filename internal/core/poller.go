@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const minInterval = 100 * time.Millisecond
+
 // PollResult is what the Poller sends on each tick.
 type PollResult struct {
 	Snapshot Snapshot
@@ -29,18 +31,25 @@ type Poller struct {
 	prevCapturedAt time.Time
 }
 
+func clampInterval(d time.Duration) time.Duration {
+	if d < minInterval {
+		return minInterval
+	}
+	return d
+}
+
 func NewPoller(client *Client, interval time.Duration) *Poller {
 	p := &Poller{
 		client:               client,
 		LongRunningThreshold: 5 * time.Second,
 		IdleInTxThreshold:    30 * time.Second,
 	}
-	p.interval.Store(int64(interval))
+	p.interval.Store(int64(clampInterval(interval)))
 	return p
 }
 
 func (p *Poller) SetInterval(d time.Duration) {
-	p.interval.Store(int64(d))
+	p.interval.Store(int64(clampInterval(d)))
 }
 
 func (p *Poller) Interval() time.Duration {
@@ -50,18 +59,24 @@ func (p *Poller) Interval() time.Duration {
 // Run captures snapshots in a loop and sends each result to out.
 // Returns when ctx is cancelled.
 func (p *Poller) Run(ctx context.Context, out chan<- PollResult) {
+	timer := time.NewTimer(0) // fire immediately on first iteration
+	defer timer.Stop()
+
 	for {
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			return
+		}
+
 		s, err := p.capture(ctx)
 		select {
 		case out <- PollResult{s, err}:
 		case <-ctx.Done():
 			return
 		}
-		select {
-		case <-time.After(p.Interval()):
-		case <-ctx.Done():
-			return
-		}
+
+		timer.Reset(p.Interval())
 	}
 }
 
@@ -99,9 +114,11 @@ func (p *Poller) capture(ctx context.Context) (Snapshot, error) {
 
 	if !p.prevCapturedAt.IsZero() {
 		elapsed := now.Sub(p.prevCapturedAt).Seconds()
-		if elapsed > 0 {
+		if elapsed > 0 && stats.XactTotal >= p.prevXactTotal {
 			stats.TPS = float64(stats.XactTotal-p.prevXactTotal) / elapsed
 		}
+		// XactTotal < prev means counter reset (server restart / pg_stat_reset);
+		// skip TPS this tick and re-baseline.
 	}
 	p.prevXactTotal = stats.XactTotal
 	p.prevCapturedAt = now
