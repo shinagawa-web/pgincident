@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	colBlocked  = 7
-	colBlocking = 7
-	colWait     = 13
+	colBlocked  = 8  // "BLOCKED"(7) + 1
+	colBlocking = 9  // "BLOCKING"(8) + 1
+	colWait     = 13 // "WAIT TIME"(9) + 4
 	colRelation = 20
 )
 
