@@ -48,9 +48,9 @@ func renderStatus(err error, msg string) string {
 }
 
 func renderFooter(canSignal bool) string {
-	base := "[q]uit  [Tab]section  [↑↓/jk]cursor  [+/-]interval  [r]efresh  [?]help"
+	base := "[q]uit  [Tab]section  [↑↓/jk]cursor  [+/-]interval  [?]help"
 	if canSignal {
-		base = "[q]uit  [Tab]section  [↑↓/jk]cursor  [K]ill  [c]ancel  [+/-]interval  [r]efresh  [?]help"
+		base = "[q]uit  [Tab]section  [↑↓/jk]cursor  [K]ill  [c]ancel  [+/-]interval  [?]help"
 	}
 	return footerStyle.Render(base)
 }

@@ -140,8 +140,6 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		a.poller.SetInterval(d)
 		a.statusMsg = fmt.Sprintf("interval: %.1fs", a.poller.Interval().Seconds())
-	case "r":
-		a.statusMsg = ""
 	case "K":
 		if !a.canSignal {
 			a.statusMsg = "pg_signal_backend required — cannot terminate backends"
@@ -280,7 +278,6 @@ func (a *App) renderHelp() string {
 		"  ↓ / j         cursor down\n" +
 		"  K             terminate selected backend\n" +
 		"  c             cancel selected query\n" +
-		"  r             force refresh\n" +
 		"  + / -         increase / decrease interval\n" +
 		"  ?             this help\n\n" +
 		dimStyle.Render("press any key to close")
