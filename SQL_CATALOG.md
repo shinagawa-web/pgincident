@@ -14,7 +14,7 @@ SELECT pg_has_role(current_user, 'pg_monitor', 'MEMBER')
 
 | PG 13 | PG 14 | PG 15 | PG 16 | PG 17 | RDS | Cloud SQL |
 |-------|-------|-------|-------|-------|-----|-----------|
-| ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| ⚠️ | ⚠️ | ⚠️ | ✅ | ⚠️ | ⚠️ | ⚠️ |
 
 ---
 
@@ -45,7 +45,7 @@ Notes:
 
 | PG 13 | PG 14 | PG 15 | PG 16 | PG 17 | RDS | Cloud SQL |
 |-------|-------|-------|-------|-------|-----|-----------|
-| ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| ⚠️ | ⚠️ | ⚠️ | ✅ | ⚠️ | ⚠️ | ⚠️ |
 
 ---
 
@@ -82,7 +82,7 @@ Notes:
 
 | PG 13 | PG 14 | PG 15 | PG 16 | PG 17 | RDS | Cloud SQL |
 |-------|-------|-------|-------|-------|-----|-----------|
-| ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| ⚠️ | ⚠️ | ⚠️ | ✅ | ⚠️ | ⚠️ | ⚠️ |
 
 ---
 
@@ -110,7 +110,7 @@ Notes:
 
 | PG 13 | PG 14 | PG 15 | PG 16 | PG 17 | RDS | Cloud SQL |
 |-------|-------|-------|-------|-------|-----|-----------|
-| ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| ⚠️ | ⚠️ | ⚠️ | ✅ | ⚠️ | ⚠️ | ⚠️ |
 
 ---
 
@@ -127,32 +127,10 @@ WHERE pg_stat_database.datname = current_database()
 GROUP BY 1
 ```
 
-Open questions (OQ-2, OQ-3):
-- TPS = delta of `xact_total` between snapshots / interval seconds. Needs previous snapshot.
-- Cache hit ratio: cumulative since stats reset vs delta-per-tick — TBD.
+Notes:
+- TPS = delta of `xact_total` between snapshots / interval seconds.
+- Cache hit ratio: cumulative since last stats reset.
 
 | PG 13 | PG 14 | PG 15 | PG 16 | PG 17 | RDS | Cloud SQL |
 |-------|-------|-------|-------|-------|-----|-----------|
-| ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-
----
-
-## 6. pg_terminate_backend / pg_cancel_backend
-
-```sql
--- Cancel (soft)
-SELECT pg_cancel_backend($1)
-
--- Terminate (hard)
-SELECT pg_terminate_backend($1)
-```
-
-Notes (OQ-4):
-- `pg_cancel_backend` requires the same role as the target, OR `pg_signal_backend`.
-- `pg_terminate_backend` requires `pg_signal_backend` or superuser.
-- On RDS: `rds_superuser` has `pg_signal_backend`; plain `pg_monitor` does NOT.
-- Detection: at startup, run `SELECT pg_has_role(current_user, 'pg_signal_backend', 'MEMBER')` and disable `[k]`/`[c]` if false.
-
-| PG 13 | PG 14 | PG 15 | PG 16 | PG 17 | RDS | Cloud SQL |
-|-------|-------|-------|-------|-------|-----|-----------|
-| ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
+| ⚠️ | ⚠️ | ⚠️ | ✅ | ⚠️ | ⚠️ | ⚠️ |
