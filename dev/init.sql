@@ -4,4 +4,4 @@ GRANT pg_monitor TO pgincident_dev;
 
 -- Table used by seed.sql for lock scenarios
 CREATE TABLE IF NOT EXISTS seed_target (id int primary key, val text);
-INSERT INTO seed_target VALUES (1, 'row for lock testing');
+INSERT INTO seed_target VALUES (1, 'row for lock testing') ON CONFLICT DO NOTHING;
