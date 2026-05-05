@@ -25,13 +25,15 @@ Targets SREs and Web engineers who reach for `psql -c "SELECT * FROM pg_stat_act
 | Required privilege | SUPERUSER | SUPERUSER | **`pg_monitor`** |
 | Managed DB (RDS, Cloud SQL) | partial | partial | **first-class** |
 | UX style | classic terminal | classic terminal | **modern (mouse, search, filter)** |
-| Focus | comprehensive stats | top-style activity | **incident response** |
-| Web UI | no | no | **planned (v1.0+)** |
+| Focus | comprehensive stats | top-style activity | **incident response + investigation** |
+| Post-mortem export | no | no | **planned (v0.7)** |
+| Web UI | no | no | **planned (v2.0)** |
 
-The two big bets:
+The three big bets:
 
 1. **`pg_monitor` instead of SUPERUSER** — unlocks managed PostgreSQL.
 2. **Incident-response framing** — not "show me everything", but "what's broken right now."
+3. **incident → investigate flow** — spot the symptom, drill into the root cause without leaving the terminal.
 
 ### 1.3 Non-goals (v0.1)
 
@@ -338,20 +340,29 @@ This matches the test infrastructure already in your other projects.
 
 ## 9. UX Details
 
-### 9.1 Layout constraints
+### 9.1 Two-mode design
+
+This tool is designed to be opened **during incidents, not as a routine monitor**. The UX is built around two modes:
+
+- **`incident` mode** (default on launch) — "what's broken right now?" Seconds-scale polling. Always the entry point.
+- **`investigate` mode** — "why is this broken?" Drill into a selected query or table to see index health, bloat, wait events, and other slow-moving signals. Accessed from `incident` by pressing `Enter` on a row.
+
+The flow is always `incident → investigate`, never the reverse. There is no standalone health dashboard.
+
+### 9.2 Layout constraints
 
 - **Minimum recommended size**: 120 columns × 40 rows.
 - **Below minimum**: show a single-screen warning message ("Terminal too small. Resize to at least 120×40.") instead of trying to render a broken layout.
 - **Above minimum**: scale section heights proportionally. Each section gets roughly 1/3 of the body area, with header (3 rows) and footer (2 rows) fixed.
 
-### 9.2 Section navigation
+### 9.4 Section navigation
 
 - `Tab` cycles through sections (Long-running → Locks → Idle).
 - Active section shows a colored left border or title prefix.
 - `↑` / `↓` (or `j` / `k`) move within the active section.
 - Selected row is highlighted.
 
-### 9.3 Key bindings
+### 9.5 Key bindings
 
 | Key | Action |
 |---|---|
@@ -360,13 +371,14 @@ This matches the test infrastructure already in your other projects.
 | `Tab` | Next section |
 | `Shift-Tab` | Previous section |
 | `↑` / `↓` / `j` / `k` | Move cursor in active section |
+| `Enter` | Open investigate mode for selected row (v0.3+) |
 | `+` / `-` | Increase / decrease refresh interval |
 | `r` | Force refresh now |
 | `k` | Kill (terminate) selected backend (with confirmation) |
 | `c` | Cancel selected query (with confirmation) — softer than kill |
 | `/` | Filter (deferred to v0.2; placeholder noted in help) |
 
-### 9.4 Confirmation modals
+### 9.6 Confirmation modals
 
 For destructive actions (`k`, `c`):
 
@@ -397,18 +409,27 @@ These are explicitly deferred to implementation phase:
 
 ---
 
-## 11. Roadmap (post-v0.1)
+## 11. Roadmap
 
 | Version | Theme |
 |---|---|
-| v0.1 | Incident dashboard (this document) |
+| v0.1 | Incident dashboard — RDS / Cloud SQL verified |
 | v0.2 | `pg_stat_statements` integration (slow query history) |
-| v0.3 | Trend graphs (last 5 minutes), wait events view |
+| v0.3 | Investigate mode — index health, bloat, wait events (accessible via `Enter` from incident view) |
 | v0.4 | Replication monitoring, log tailing |
-| v0.5 | Vacuum / autovacuum monitoring |
-| v0.6 | Alerts (threshold-based, terminal notifications) |
-| v1.0 | Snapshot save / replay; first stable release |
+| v0.5 | Snapshot recording (local SQLite) |
+| v0.6 | Autovacuum / wraparound danger detection |
+| v0.7 | Post-mortem auto-generation (Markdown export) |
+| v0.8 | Alerts (threshold-based, terminal notifications) |
+| v1.0 | Snapshot save / replay; Azure / Neon / Supabase support; first stable release |
 | v2.0 | Web UI mode (`<name> serve`) |
+
+**Design decisions reflected in this roadmap:**
+
+- The tool is opened during incidents, not as a routine monitor. There is no standalone health dashboard.
+- APM / OpenTelemetry integration is explicitly out of scope.
+- Platform support beyond RDS / Cloud SQL is deferred to v1.0.
+- Post-mortem generation (v0.7) requires snapshot recording (v0.5) — that dependency is intentional.
 
 ---
 
