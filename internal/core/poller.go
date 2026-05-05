@@ -1,0 +1,118 @@
+package core
+
+import (
+	"context"
+	"sync/atomic"
+	"time"
+)
+
+// PollResult is what the Poller sends on each tick.
+type PollResult struct {
+	Snapshot Snapshot
+	Err      error
+}
+
+// Poller runs a background loop that captures Snapshots at a configurable interval.
+type Poller struct {
+	client   *Client
+	interval atomic.Int64 // nanoseconds; read/written atomically
+
+	LongRunningThreshold time.Duration
+	IdleInTxThreshold    time.Duration
+
+	// cached on first capture
+	pgVersion  string
+	serverAddr string
+
+	// TPS state
+	prevXactTotal  int64
+	prevCapturedAt time.Time
+}
+
+func NewPoller(client *Client, interval time.Duration) *Poller {
+	p := &Poller{
+		client:               client,
+		LongRunningThreshold: 5 * time.Second,
+		IdleInTxThreshold:    30 * time.Second,
+	}
+	p.interval.Store(int64(interval))
+	return p
+}
+
+func (p *Poller) SetInterval(d time.Duration) {
+	p.interval.Store(int64(d))
+}
+
+func (p *Poller) Interval() time.Duration {
+	return time.Duration(p.interval.Load())
+}
+
+// Run captures snapshots in a loop and sends each result to out.
+// Returns when ctx is cancelled.
+func (p *Poller) Run(ctx context.Context, out chan<- PollResult) {
+	for {
+		s, err := p.capture(ctx)
+		select {
+		case out <- PollResult{s, err}:
+		case <-ctx.Done():
+			return
+		}
+		select {
+		case <-time.After(p.Interval()):
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (p *Poller) capture(ctx context.Context) (Snapshot, error) {
+	now := time.Now()
+
+	if p.pgVersion == "" {
+		v, a, err := p.client.ServerInfo(ctx)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		p.pgVersion = v
+		p.serverAddr = a
+	}
+
+	activities, err := p.client.LongRunning(ctx, p.LongRunningThreshold)
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	locks, err := p.client.Locks(ctx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	idleInTx, err := p.client.IdleInTx(ctx, p.IdleInTxThreshold)
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	stats, err := p.client.Stats(ctx)
+	if err != nil {
+		return Snapshot{}, err
+	}
+
+	if !p.prevCapturedAt.IsZero() {
+		elapsed := now.Sub(p.prevCapturedAt).Seconds()
+		if elapsed > 0 {
+			stats.TPS = float64(stats.XactTotal-p.prevXactTotal) / elapsed
+		}
+	}
+	p.prevXactTotal = stats.XactTotal
+	p.prevCapturedAt = now
+
+	return Snapshot{
+		CapturedAt: now,
+		PGVersion:  p.pgVersion,
+		ServerAddr: p.serverAddr,
+		DBStats:    stats,
+		Activities: activities,
+		Locks:      locks,
+		IdleInTx:   idleInTx,
+	}, nil
+}

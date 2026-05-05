@@ -24,27 +24,29 @@ func main() {
 	}
 	defer client.Close(ctx)
 
-	fmt.Println("connected. fetching long-running queries (> 5s)...")
+	poller := core.NewPoller(client, time.Second)
+	out := make(chan core.PollResult, 1)
+	go poller.Run(ctx, out)
 
-	activities, err := client.LongRunning(ctx, 5*time.Second)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "query error: %v\n", err)
+	r := <-out
+	if r.Err != nil {
+		fmt.Fprintf(os.Stderr, "poll error: %v\n", r.Err)
 		os.Exit(1)
 	}
+	s := r.Snapshot
 
-	if len(activities) == 0 {
-		fmt.Println("(none)")
-		return
-	}
+	fmt.Printf("PG %s @ %s\n", s.PGVersion, s.ServerAddr)
+	fmt.Printf("connections: %d/%d  TPS: %.1f  cache: %.1f%%\n",
+		s.DBStats.ConnectionsActive, s.DBStats.ConnectionsMax,
+		s.DBStats.TPS, s.DBStats.CacheHitRatio*100)
+	fmt.Printf("long-running: %d  locks: %d  idle-in-tx: %d\n",
+		len(s.Activities), len(s.Locks), len(s.IdleInTx))
 
-	fmt.Printf("%-8s %-16s %-16s %-14s %s\n", "PID", "USER", "DURATION", "STATE", "QUERY")
-	for _, a := range activities {
-		fmt.Printf("%-8d %-16s %-16s %-14s %s\n",
-			a.PID, a.User,
-			formatDuration(a.Duration),
-			a.State,
-			truncate(a.Query, 60),
-		)
+	if len(s.Activities) > 0 {
+		fmt.Printf("\n%-8s %-16s %-16s %s\n", "PID", "USER", "DURATION", "QUERY")
+		for _, a := range s.Activities {
+			fmt.Printf("%-8d %-16s %-16s %s\n", a.PID, a.User, formatDuration(a.Duration), truncate(a.Query, 60))
+		}
 	}
 }
 
