@@ -13,13 +13,16 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%02d:%02d:%05.2f", h, m, s)
 }
 
-// truncate cuts s to at most n runes, appending "…" if truncated.
+// truncate cuts s to at most n runes (including the ellipsis if truncated).
 func truncate(s string, n int) string {
 	runes := []rune(s)
 	if len(runes) <= n {
 		return s
 	}
-	return string(runes[:n]) + "…"
+	if n <= 1 {
+		return string(runes[:n])
+	}
+	return string(runes[:n-1]) + "…"
 }
 
 // padRight pads s to exactly n runes (truncating with "…" if needed).
