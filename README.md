@@ -443,3 +443,87 @@ These are explicitly deferred to implementation phase:
 ---
 
 *End of v0.1 design.*
+
+---
+
+## Development
+
+### Prerequisites
+
+- Go 1.22+
+- Docker (for local Postgres)
+
+### Start the dev environment
+
+```bash
+make dev-up   # starts Postgres 16 with pgincident_dev / pg_monitor
+make run      # builds and launches the TUI
+make dev-down # stop and remove the container
+```
+
+Default DSN (used when `DATABASE_URL` is not set):
+```
+postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres
+```
+
+### Simulating incident scenarios
+
+Each scenario requires separate terminal windows.
+
+**Long-running query (> 5s)**
+
+Terminal 1 — seed a 30-second sleep:
+```bash
+docker compose exec postgres psql -U postgres -c "SELECT pg_sleep(30);"
+```
+Terminal 2 — run the TUI and verify `long-running: 1`:
+```bash
+make run
+```
+
+**Lock (blocked / blocking)**
+
+Terminal 1 — hold an exclusive lock:
+```bash
+docker compose exec postgres psql -U postgres -c \
+  "BEGIN; LOCK TABLE seed_target IN ACCESS EXCLUSIVE MODE; SELECT pg_sleep(60);"
+```
+Terminal 2 — issue a blocked query:
+```bash
+docker compose exec postgres psql -U postgres -c "SELECT * FROM seed_target;"
+```
+Terminal 3 — run the TUI and verify `locks: 1`:
+```bash
+make run
+```
+
+**Idle in transaction (> 30s)**
+
+Terminal 1 — open an interactive session and leave a transaction open:
+```bash
+docker compose exec -it postgres psql -U postgres
+```
+Inside psql:
+```sql
+BEGIN;
+SELECT 1;
+-- do not COMMIT or ROLLBACK — leave the session open
+```
+After 30 seconds, run the TUI and verify `idle-in-tx: 1`:
+```bash
+make run
+```
+
+### Testing `pg_signal_backend` behaviour
+
+Connect as `pgincident_dev` (no `pg_signal_backend`):
+```bash
+make run   # uses pgincident_dev by default
+```
+Press `K` on any row → should show an error message, no confirmation modal.
+
+Connect as superuser (has `pg_signal_backend`):
+```bash
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres make run
+```
+Press `K` on any row → confirmation modal appears.
