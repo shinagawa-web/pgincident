@@ -6,7 +6,7 @@ import (
 	"github.com/shinagawa-web/pgincident/internal/core"
 )
 
-const colIdleTime = 16
+const colIdleTime = 13
 
 func renderIdleSection(idle []core.Activity, cursor int, active bool, maxRows, width int) string {
 	colQuery := width - cursorPrefix - colPID - colUser - colIdleTime

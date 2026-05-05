@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	colPID      = 8
-	colUser     = 16
-	colDuration = 16
-	colState    = 14
+	colPID       = 7
+	colUser      = 14
+	colDuration  = 13
+	colState     = 12
 	cursorPrefix = 2 // "▸ " or "  "
 )
 

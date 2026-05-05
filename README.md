@@ -351,8 +351,8 @@ The flow is always `incident → investigate`, never the reverse. There is no st
 
 ### 9.2 Layout constraints
 
-- **Minimum recommended size**: 120 columns × 40 rows.
-- **Below minimum**: show a single-screen warning message ("Terminal too small. Resize to at least 120×40.") instead of trying to render a broken layout.
+- **Minimum supported size**: 80 columns × 24 rows.
+- **Below minimum**: show a single-screen warning message ("Terminal too small. Resize to at least 80×24.") instead of trying to render a broken layout.
 - **Above minimum**: scale section heights proportionally. Each section gets roughly 1/3 of the body area, with header (3 rows) and footer (2 rows) fixed.
 
 ### 9.4 Section navigation

@@ -238,8 +238,8 @@ func (a *App) View() string {
 	if a.width == 0 {
 		return "loading…"
 	}
-	if a.width < 120 || a.height < 40 {
-		msg := fmt.Sprintf("Terminal too small (%d×%d).\nResize to at least 120×40.", a.width, a.height)
+	if a.width < 80 || a.height < 24 {
+		msg := fmt.Sprintf("Terminal too small (%d×%d).\nResize to at least 80×24.", a.width, a.height)
 		return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
 			warnStyle.Render(msg))
 	}

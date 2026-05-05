@@ -7,10 +7,10 @@ import (
 )
 
 const (
-	colBlocked  = 10
-	colBlocking = 10
-	colWait     = 16
-	colRelation = 28
+	colBlocked  = 7
+	colBlocking = 7
+	colWait     = 13
+	colRelation = 20
 )
 
 func renderLocksSection(locks []core.Lock, cursor int, active bool, maxRows, width int) string {
