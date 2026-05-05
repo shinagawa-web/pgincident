@@ -26,13 +26,8 @@ func main() {
 	}
 	defer client.Close(ctx)
 
-	canSignal, err := client.CanSignal(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: pg_signal_backend check failed: %v\n", err)
-	}
-
 	poller := core.NewPoller(client, time.Second)
-	app := tui.New(client, poller, canSignal)
+	app := tui.New(poller)
 
 	p := tea.NewProgram(app, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {

@@ -14,24 +14,8 @@ import (
 
 type snapshotMsg core.PollResult
 
-type signalResultMsg struct {
-	action string
-	pid    int
-	ok     bool
-	err    error
-}
-
-type confirmAction int
-
-const (
-	noConfirm confirmAction = iota
-	confirmKill
-	confirmCancel
-)
-
 // App is the root Bubble Tea model.
 type App struct {
-	client    *core.Client
 	poller    *core.Poller
 	pollCh    chan core.PollResult
 	cancel    context.CancelFunc
@@ -42,22 +26,18 @@ type App struct {
 	height    int
 	lastErr   error
 	statusMsg string
-	confirming confirmAction
 	showHelp  bool
-	canSignal bool
 	quitting  bool
 }
 
-func New(client *core.Client, poller *core.Poller, canSignal bool) *App {
+func New(poller *core.Poller) *App {
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := make(chan core.PollResult, 1)
 	go poller.Run(ctx, ch)
 	return &App{
-		client:    client,
-		poller:    poller,
-		pollCh:    ch,
-		cancel:    cancel,
-		canSignal: canSignal,
+		poller: poller,
+		pollCh: ch,
+		cancel: cancel,
 	}
 }
 
@@ -81,14 +61,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.lastErr = nil
 		}
 		return a, waitForSnapshot(a.pollCh)
-	case signalResultMsg:
-		if msg.err != nil {
-			a.statusMsg = fmt.Sprintf("error: %v", msg.err)
-		} else if msg.ok {
-			a.statusMsg = fmt.Sprintf("%s pid=%d: done", msg.action, msg.pid)
-		} else {
-			a.statusMsg = fmt.Sprintf("%s pid=%d: backend not found", msg.action, msg.pid)
-		}
 	case tea.KeyMsg:
 		return a.handleKey(msg)
 	}
@@ -96,18 +68,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if a.confirming != noConfirm {
-		switch msg.String() {
-		case "y", "Y":
-			action, pid := a.confirming, a.selectedPID()
-			a.confirming = noConfirm
-			return a, a.signalCmd(action, pid)
-		case "n", "N", "esc":
-			a.confirming = noConfirm
-		}
-		return a, nil
-	}
-
 	if a.showHelp {
 		a.showHelp = false
 		return a, nil
@@ -140,18 +100,6 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		a.poller.SetInterval(d)
 		a.statusMsg = fmt.Sprintf("interval: %.1fs", a.poller.Interval().Seconds())
-	case "K":
-		if !a.canSignal {
-			a.statusMsg = "pg_signal_backend required — cannot terminate backends"
-		} else if a.selectedPID() > 0 {
-			a.confirming = confirmKill
-		}
-	case "c":
-		if !a.canSignal {
-			a.statusMsg = "pg_signal_backend required — cannot cancel queries"
-		} else if a.selectedPID() > 0 {
-			a.confirming = confirmCancel
-		}
 	}
 	return a, nil
 }
@@ -182,42 +130,6 @@ func (a *App) sectionLen() int {
 	return 0
 }
 
-func (a *App) selectedPID() int {
-	switch a.section {
-	case SectionActivity:
-		if i := a.cursor[SectionActivity]; i < len(a.snapshot.Activities) {
-			return a.snapshot.Activities[i].PID
-		}
-	case SectionLocks:
-		if i := a.cursor[SectionLocks]; i < len(a.snapshot.Locks) {
-			return a.snapshot.Locks[i].BlockedPID
-		}
-	case SectionIdle:
-		if i := a.cursor[SectionIdle]; i < len(a.snapshot.IdleInTx) {
-			return a.snapshot.IdleInTx[i].PID
-		}
-	}
-	return 0
-}
-
-func (a *App) signalCmd(action confirmAction, pid int) tea.Cmd {
-	return func() tea.Msg {
-		ctx := context.Background()
-		var ok bool
-		var err error
-		var name string
-		switch action {
-		case confirmKill:
-			ok, err = a.client.TerminateBackend(ctx, pid)
-			name = "terminate"
-		case confirmCancel:
-			ok, err = a.client.CancelBackend(ctx, pid)
-			name = "cancel"
-		}
-		return signalResultMsg{action: name, pid: pid, ok: ok, err: err}
-	}
-}
-
 // sectionDataRows returns the number of data rows each section can display.
 func (a *App) sectionDataRows() int {
 	// fixed rows: titleBar(1) + statsBar(1) + 4×divider(4) + statusBar(1) + footer(1) = 8
@@ -245,9 +157,6 @@ func (a *App) View() string {
 	if a.showHelp {
 		return a.renderHelp()
 	}
-	if a.confirming != noConfirm {
-		return a.renderConfirmModal()
-	}
 
 	div := dimStyle.Render(strings.Repeat("─", a.width))
 	dr := a.sectionDataRows()
@@ -263,7 +172,7 @@ func (a *App) View() string {
 		renderIdleSection(a.snapshot.IdleInTx, a.cursor[SectionIdle], a.section == SectionIdle, dr, a.width),
 		div,
 		renderStatus(a.lastErr, a.statusMsg),
-		renderFooter(a.canSignal),
+		renderFooter(),
 	}
 
 	return strings.Join(parts, "\n")
@@ -276,38 +185,9 @@ func (a *App) renderHelp() string {
 		"  Shift-Tab     previous section\n" +
 		"  ↑ / k         cursor up\n" +
 		"  ↓ / j         cursor down\n" +
-		"  K             terminate selected backend\n" +
-		"  c             cancel selected query\n" +
 		"  + / -         increase / decrease interval\n" +
 		"  ?             this help\n\n" +
 		dimStyle.Render("press any key to close")
-	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
-		modalStyle.Render(content))
-}
-
-func (a *App) renderConfirmModal() string {
-	pid := a.selectedPID()
-	var verb, query string
-	switch a.confirming {
-	case confirmKill:
-		verb = "Terminate backend"
-	case confirmCancel:
-		verb = "Cancel query for backend"
-	}
-	switch a.section {
-	case SectionActivity:
-		if i := a.cursor[SectionActivity]; i < len(a.snapshot.Activities) {
-			query = truncate(a.snapshot.Activities[i].Query, 60)
-		}
-	case SectionLocks:
-		query = "(blocked query)"
-	case SectionIdle:
-		if i := a.cursor[SectionIdle]; i < len(a.snapshot.IdleInTx) {
-			query = truncate(a.snapshot.IdleInTx[i].Query, 60)
-		}
-	}
-	content := fmt.Sprintf("%s pid=%d?\n\n  %s\n\n  [y]es   [n]o",
-		verb, pid, dimStyle.Render(query))
 	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
 		modalStyle.Render(content))
 }

@@ -47,12 +47,8 @@ func renderStatus(err error, msg string) string {
 	return ""
 }
 
-func renderFooter(canSignal bool) string {
-	base := "[q]uit  [Tab]section  [↑↓/jk]cursor  [+/-]interval  [?]help"
-	if canSignal {
-		base = "[q]uit  [Tab]section  [↑↓/jk]cursor  [K]ill  [c]ancel  [+/-]interval  [?]help"
-	}
-	return footerStyle.Render(base)
+func renderFooter() string {
+	return footerStyle.Render("[q]uit  [Tab]section  [↑↓/jk]cursor  [+/-]interval  [?]help")
 }
 
 // sectionTitle renders a title row with the count badge right-aligned.
