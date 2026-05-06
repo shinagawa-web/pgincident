@@ -8,6 +8,34 @@ make run      # builds and launches the TUI
 make dev-down # stop and remove the container
 ```
 
+## Pre-push hook
+
+Install the hook once after cloning:
+
+```bash
+make install-hooks
+```
+
+The hook runs automatically on every `git push` and checks:
+
+- `go mod tidy` — fails if `go.mod`/`go.sum` are out of sync
+- `go build ./...`
+- `go vet ./...`
+- Unit + e2e tests (`go test -race ./internal/...`)
+- Integration tests (skipped automatically when `DATABASE_URL` is unset)
+
+Bypass with `git push --no-verify` if needed.
+
+## Useful make targets
+
+| Target | Description |
+|---|---|
+| `make test` | Run all unit and e2e tests with race detector |
+| `make test-integration` | Run integration tests (requires `DATABASE_URL`) |
+| `make lint` | Run `go vet` |
+| `make tidy` | Run `go mod tidy` and verify no diff |
+| `make install-hooks` | Install the pre-push hook |
+
 ## Simulating incident scenarios
 
 Each scenario requires separate terminal windows.
