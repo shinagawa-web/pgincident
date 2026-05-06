@@ -15,6 +15,8 @@ func TestFormatDuration(t *testing.T) {
 		{90 * time.Second, "00:01:30.00"},
 		{2*time.Hour + 14*time.Minute + 32*time.Second, "02:14:32.00"},
 		{500 * time.Millisecond, "00:00:00.50"},
+		// boundary: must not produce "60.00" due to floating-point rounding
+		{119999 * time.Millisecond, "00:01:59.99"},
 	}
 	for _, c := range cases {
 		got := formatDuration(c.d)

@@ -18,6 +18,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Build
+        run: go build ./...
+
       - name: Run tests
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./internal/...
 
@@ -26,3 +29,4 @@ jobs:
         with:
           files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false

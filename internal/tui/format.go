@@ -7,10 +7,13 @@ import (
 )
 
 func formatDuration(d time.Duration) string {
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	s := d.Seconds() - float64(int(d.Minutes()))*60
-	return fmt.Sprintf("%02d:%02d:%05.2f", h, m, s)
+	// Use integer centiseconds to avoid floating-point rounding producing "60.00".
+	cs := int(d.Milliseconds() / 10)
+	h := cs / 360000
+	m := (cs % 360000) / 6000
+	s := (cs % 6000) / 100
+	frac := cs % 100
+	return fmt.Sprintf("%02d:%02d:%02d.%02d", h, m, s, frac)
 }
 
 // truncate cuts s to at most n runes (including the ellipsis if truncated).
