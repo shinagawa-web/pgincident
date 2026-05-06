@@ -1,10 +1,28 @@
-.PHONY: build run dev-up dev-down dev-seed
+.PHONY: build run test test-integration lint tidy install-hooks dev-up dev-down dev-seed
 
 build:
 	go build ./...
 
 run:
 	go run ./cmd/pgincident
+
+test:
+	env -u DATABASE_URL go test -race -coverprofile=coverage.out -covermode=atomic ./internal/...
+
+test-integration:
+	go test -race -v -timeout 2m -run Integration ./internal/core/...
+
+lint:
+	go vet ./...
+
+tidy:
+	go mod tidy
+	git diff --exit-code go.mod go.sum
+
+install-hooks:
+	cp scripts/pre-push .git/hooks/pre-push
+	chmod +x .git/hooks/pre-push
+	@echo "pre-push hook installed"
 
 dev-up:
 	docker compose up -d

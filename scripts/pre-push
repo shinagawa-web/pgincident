@@ -1,0 +1,30 @@
+#!/bin/sh
+# Pre-push hook: runs all checks before pushing.
+# Bypass with: git push --no-verify
+
+set -e
+
+echo "==> Checking go.mod is tidy..."
+go mod tidy
+git diff --exit-code go.mod go.sum || {
+  echo "go mod tidy produced changes — commit them first"
+  exit 1
+}
+
+echo "==> Building..."
+go build ./...
+
+echo "==> Linting..."
+go vet ./...
+
+echo "==> Running unit tests..."
+env -u DATABASE_URL go test -race ./internal/...
+
+if [ -n "$DATABASE_URL" ]; then
+  echo "==> Running integration tests..."
+  go test -race -v -timeout 2m -run Integration ./internal/core/...
+else
+  echo "==> Skipping integration tests (DATABASE_URL not set)"
+fi
+
+echo "==> All checks passed."
