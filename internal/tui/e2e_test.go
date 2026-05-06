@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -14,7 +15,15 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	prev, hadPrev := os.LookupEnv("NO_COLOR")
 	os.Setenv("NO_COLOR", "1")
+	defer func() {
+		if hadPrev {
+			os.Setenv("NO_COLOR", prev)
+		} else {
+			os.Unsetenv("NO_COLOR")
+		}
+	}()
 	os.Exit(m.Run())
 }
 
@@ -35,15 +44,33 @@ func e2eSnapshot() core.Snapshot {
 	}
 }
 
-// newE2EApp creates an App with a snapshot pre-buffered in the channel for teatest.
-func newE2EApp(snap core.Snapshot) *App {
+// newE2EApp creates an App that continuously re-sends a fixed snapshot so that
+// waitForSnapshot never blocks after the first poll cycle. The background
+// goroutine stops when ctx is cancelled (i.e. when the test calls cancel or tm.Quit).
+func newE2EApp(t *testing.T, snap core.Snapshot) *App {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
 	ch := make(chan core.PollResult, 1)
-	ch <- core.PollResult{Snapshot: snap}
-	return &App{
+	go func() {
+		for {
+			select {
+			case ch <- core.PollResult{Snapshot: snap}:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	app := &App{
 		pollCh: ch,
-		cancel: func() {},
+		cancel: cancel,
 		poller: core.NewPoller(nil, time.Second),
 	}
+	t.Cleanup(cancel)
+	return app
+}
+
+func stripped(bts []byte) []byte {
+	return []byte(ansi.Strip(string(bts)))
 }
 
 // TestGoldenMainView verifies the full dashboard layout against a stored golden file.
@@ -57,8 +84,7 @@ func TestGoldenMainView(t *testing.T) {
 		height:   40,
 		snapshot: e2eSnapshot(),
 	}
-	out := ansi.Strip(app.View())
-	golden.RequireEqual(t, []byte(out))
+	golden.RequireEqual(t, []byte(ansi.Strip(app.View())))
 }
 
 // TestGoldenHelpOverlay verifies the help overlay layout against a stored golden file.
@@ -72,17 +98,16 @@ func TestGoldenHelpOverlay(t *testing.T) {
 		snapshot: e2eSnapshot(),
 		showHelp: true,
 	}
-	out := ansi.Strip(app.View())
-	golden.RequireEqual(t, []byte(out))
+	golden.RequireEqual(t, []byte(ansi.Strip(app.View())))
 }
 
 // TestE2EQuit verifies that pressing q causes the program to exit cleanly.
 func TestE2EQuit(t *testing.T) {
-	app := newE2EApp(e2eSnapshot())
+	app := newE2EApp(t, e2eSnapshot())
 	tm := teatest.NewTestModel(t, app, teatest.WithInitialTermSize(120, 40))
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return bytes.Contains(bts, []byte("pgincident"))
+		return bytes.Contains(stripped(bts), []byte("pgincident"))
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -98,35 +123,40 @@ func TestE2EQuit(t *testing.T) {
 }
 
 // TestE2EHelpViaKey verifies that pressing ? opens the help overlay via the real program loop.
+// Asserts on "press any key to close" which only appears inside the help overlay modal.
 func TestE2EHelpViaKey(t *testing.T) {
-	app := newE2EApp(e2eSnapshot())
+	app := newE2EApp(t, e2eSnapshot())
 	tm := teatest.NewTestModel(t, app, teatest.WithInitialTermSize(120, 40))
 	t.Cleanup(func() { tm.Quit() })
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return bytes.Contains(bts, []byte("pgincident"))
+		return bytes.Contains(stripped(bts), []byte("pgincident"))
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 
+	// "press any key to close" only appears in the help overlay, not in the main view.
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return bytes.Contains(bts, []byte("quit"))
+		return bytes.Contains(stripped(bts), []byte("press any key to close"))
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
 }
 
-// TestE2ETabNavigation verifies that Tab cycles through sections via the real program loop.
+// TestE2ETabNavigation verifies that Tab moves the active-section marker to Locks.
+// Asserts on "▶ Locks (waiting)" which only appears when that section is focused.
 func TestE2ETabNavigation(t *testing.T) {
-	app := newE2EApp(e2eSnapshot())
+	app := newE2EApp(t, e2eSnapshot())
 	tm := teatest.NewTestModel(t, app, teatest.WithInitialTermSize(120, 40))
 	t.Cleanup(func() { tm.Quit() })
 
+	// Wait for initial render with Activity section active.
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return bytes.Contains(bts, []byte("Long-running queries"))
+		return bytes.Contains(stripped(bts), []byte("▶ Long-running queries"))
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyTab})
 
+	// After Tab, the active marker must move to Locks.
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return bytes.Contains(bts, []byte("Locks (waiting)"))
+		return bytes.Contains(stripped(bts), []byte("▶ Locks (waiting)"))
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
 }
