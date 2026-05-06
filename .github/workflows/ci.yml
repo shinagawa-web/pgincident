@@ -30,3 +30,40 @@ jobs:
           files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Grant pg_monitor
+        run: psql -h localhost -U postgres -c "GRANT pg_monitor TO postgres"
+        env:
+          PGPASSWORD: postgres
+
+      - name: Run integration tests
+        run: go test -race -v -timeout 2m -run Integration ./internal/core/...
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
