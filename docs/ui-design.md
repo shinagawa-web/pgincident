@@ -1,5 +1,7 @@
 # UI Design
 
+> **Forward-looking design document.** This describes the target navigation model across multiple versions. v0.1 ships a single dashboard screen (Level 2 entry point). Level 1 is planned for v0.1.3; Level 3 for v0.3.
+
 ## Three-level navigation
 
 ### Level 1 — Overview (entry point)

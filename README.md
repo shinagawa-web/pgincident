@@ -25,24 +25,23 @@ Targets SREs and Web engineers who reach for `psql -c "SELECT * FROM pg_stat_act
 ### 2.1 Single-screen Incident Dashboard
 
 ```
-┌─ pgincident v0.1.0 ───────── connected: prod-db@10.0.1.42:5432 (PG 16.1) ─┐
-│ Connections: 142 / 200 (71%)   TPS: 2,340   Cache hit: 99.2%               │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ Long-running queries (> 5s)                                    [12 active]  │
-│   PID     USER           DURATION      STATE        QUERY                   │
-│ ▶ 12345  app_user    00:02:14.32  active   SELECT u.* FROM users u JOIN…    │
-│   12346  worker      00:00:18.04  active   UPDATE jobs SET status=...       │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ Locks (waiting)                                                 [3 waiting] │
-│   BLOCKED  BLOCKING   WAIT TIME     RELATION             MODE               │
-│ ▶ 12350    12345     00:01:23.10  public.users   ShareLock                  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ Idle in transaction (> 30s)                                      [2 idle]   │
-│   PID     USER           IDLE TIME     LAST QUERY                           │
-│ ▶ 12348  worker      00:01:45.22  UPDATE jobs SET status=...                │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ [q]uit  [Tab]section  [↑↓/jk]cursor  [+/-]interval  [?]help                │
-└─────────────────────────────────────────────────────────────────────────────┘
+pgincident v0.1.0              connected: 10.0.1.42:5432 (PG 16.1)  interval: 1.0s
+Connections: 142/200 (71%)   TPS: 2340   Cache hit: 99.2%
+─────────────────────────────────────────────────────────────────────────────────
+Long-running queries (> 5s)                                         [12 active]
+  PID     USER           DURATION      STATE        QUERY
+▸ 12345  app_user    00:02:14.32  active   SELECT u.* FROM users u JOIN…
+  12346  worker      00:00:18.04  active   UPDATE jobs SET status=...
+─────────────────────────────────────────────────────────────────────────────────
+Locks (waiting)                                                      [3 waiting]
+  BLOCKED  BLOCKING   WAIT TIME     RELATION             MODE
+  12350    12345     00:01:23.10  public.users   ShareLock
+─────────────────────────────────────────────────────────────────────────────────
+Idle in transaction (> 30s)                                            [2 idle]
+  PID     USER           IDLE TIME     LAST QUERY
+  12348  worker      00:01:45.22  UPDATE jobs SET status=...
+─────────────────────────────────────────────────────────────────────────────────
+[q]uit  [Tab]section  [↑↓/jk]cursor  [+/-]interval  [?]help
 ```
 
 ### 2.2 Five core elements
@@ -72,7 +71,7 @@ See `SQL_CATALOG.md` for the candidate SQL per metric, version notes, and verifi
 
 ## 6. Update Loop
 
-- Default interval: 1 second. Adjustable with `+` / `-` (minimum 100ms).
+- Default interval: 1 second. Adjustable with `+` / `-` (minimum 500ms). See issue [#12](https://github.com/shinagawa-web/pgincident/issues/12) for planned change to 5s default / 1s minimum.
 - Poller runs in a background goroutine, sends `PollResult` to TUI via channel. TUI never blocks on DB.
 - Uses `time.NewTimer` (not `time.After`) to avoid timer leaks.
 - TPS skipped when `XactTotal` goes backward (server restart / `pg_stat_reset`).
@@ -95,7 +94,7 @@ Note: `pg_stat_statements` (v0.2) can be heavier on systems with many unique que
 
 ## 8. Testing
 
-See issue #10 for v0.1.1 scope. Strategy:
+Planned for v0.1.1 (see issue [#10](https://github.com/shinagawa-web/pgincident/issues/10)). Strategy:
 
 - **Unit tests**: pure Go logic (formatters, poller math) — no DB
 - **Integration tests**: real Postgres via `DATABASE_URL`; skipped if unreachable
@@ -103,11 +102,13 @@ See issue #10 for v0.1.1 scope. Strategy:
 
 ## 9. UX Details
 
-### 9.1 Three-level design
+### 9.1 Three-level design (target architecture)
 
-- **Level 1 — Overview** (entry point) — Global DB health at a glance. Key metrics with status colors (normal / warning / critical). If something is red, drill into Level 2.
-- **Level 2 — Category view** — Per-category lists: Activity / Locks / I/O / Statements / Tables / Vacuum / Replication / Connections.
-- **Level 3 — Process view** (`Enter`) — Individual query and session investigation. Full SQL, wait events, lock chain, cancel/kill (v0.3+).
+> v0.1 ships a single dashboard screen (Level 2 entry point). Level 1 overview is planned for v0.1.3; full Level 3 investigation for v0.3.
+
+- **Level 1 — Overview** (v0.1.3) — Global DB health at a glance. Key metrics with status colors (normal / warning / critical). If something is red, drill into Level 2.
+- **Level 2 — Category view** — Per-category lists: Activity / Locks / I/O / Statements / Tables / Vacuum / Replication / Connections. *(v0.1 ships Activity, Locks, Idle in transaction)*
+- **Level 3 — Process view** (`Enter`, v0.3+) — Individual query and session investigation. Full SQL, wait events, lock chain, cancel/kill.
 
 ### 9.2 Layout constraints
 
@@ -194,7 +195,7 @@ pgincident/
 │   │   └── format.go              # duration / padding helpers
 │   └── version/
 │       └── version.go
-├── .github/workflows/
+├── .github/workflows/             # planned in v0.1.1
 ├── Makefile
 ├── go.mod / go.sum
 └── README.md
@@ -204,7 +205,7 @@ Boundary rules:
 
 - **`core` knows nothing about the TUI.** No lipgloss, no Bubble Tea types, no formatting. Returns plain Go structs and `time.Duration`.
 - **`tui` knows nothing about the SQL.** Receives structs from `core` and maps them to views.
-- **Both depend on `internal/version`.** Nothing else is shared.
+- **Only `tui` depends on `internal/version`.** Nothing else is shared.
 
 ### Prerequisites
 
