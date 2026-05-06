@@ -8,6 +8,15 @@ import (
 
 const minInterval = 100 * time.Millisecond
 
+// Querier is the database interface used by Poller.
+type Querier interface {
+	ServerInfo(ctx context.Context) (string, string, error)
+	LongRunning(ctx context.Context, threshold time.Duration) ([]Activity, error)
+	Locks(ctx context.Context) ([]Lock, error)
+	IdleInTx(ctx context.Context, threshold time.Duration) ([]Activity, error)
+	Stats(ctx context.Context) (DBStats, error)
+}
+
 // PollResult is what the Poller sends on each tick.
 type PollResult struct {
 	Snapshot Snapshot
@@ -16,7 +25,7 @@ type PollResult struct {
 
 // Poller runs a background loop that captures Snapshots at a configurable interval.
 type Poller struct {
-	client   *Client
+	client   Querier
 	interval atomic.Int64 // nanoseconds; read/written atomically
 
 	LongRunningThreshold time.Duration
@@ -38,7 +47,7 @@ func clampInterval(d time.Duration) time.Duration {
 	return d
 }
 
-func NewPoller(client *Client, interval time.Duration) *Poller {
+func NewPoller(client Querier, interval time.Duration) *Poller {
 	p := &Poller{
 		client:               client,
 		LongRunningThreshold: 5 * time.Second,
