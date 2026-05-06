@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"net"
 	"os"
 	"testing"
 	"time"
@@ -32,8 +33,16 @@ func TestIntegrationServerInfo(t *testing.T) {
 	if version == "" {
 		t.Error("version is empty")
 	}
-	if addr == ":" {
-		t.Errorf("addr looks empty: %q", addr)
+	host, port, splitErr := net.SplitHostPort(addr)
+	if splitErr != nil {
+		t.Errorf("addr is not a valid host:port %q: %v", addr, splitErr)
+	} else {
+		if host == "" {
+			t.Errorf("host part of addr is empty: %q", addr)
+		}
+		if port == "" || port == "0" {
+			t.Errorf("port part of addr is zero or empty: %q", addr)
+		}
 	}
 }
 
