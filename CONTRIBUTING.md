@@ -30,7 +30,7 @@ Bypass with `git push --no-verify` if needed.
 
 | Target | Description |
 |---|---|
-| `make test` | Run all unit and e2e tests with race detector |
+| `make test` | Run all unit and e2e tests with race detector (writes `coverage.out`) |
 | `make test-integration` | Run integration tests (requires `DATABASE_URL`) |
 | `make lint` | Run `go vet` |
 | `make tidy` | Run `go mod tidy` and verify no diff |
