@@ -1,0 +1,38 @@
+pgincident v0.1.0                                                    connected: localhost:5432 (PG 16.1)  interval: 1.0s
+Connections: 3/100 (3%)   TPS: —   Cache hit: 99.0%
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+▶ Long-running queries (> 5s)                                                                                 [1 active]
+  PID    USER          DURATION     STATE       QUERY
+▸ 1001   alice         00:00:12.00  active      SELECT count(*) FROM orders
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Locks (waiting)                                                                                            [0 waiting]
+  BLOCKED BLOCKING WAIT TIME    RELATION            MODE
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Idle in transaction (> 30s)                                                                                   [0 idle]
+  PID    USER          IDLE TIME    LAST QUERY
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+[q]uit  [Tab]section  [↑↓/jk]cursor  [+/-]interval  [?]help
