@@ -219,6 +219,33 @@ func TestPollerRunCancelDuringSend(t *testing.T) {
 	}
 }
 
+func TestPollerRunCtxDoneAtSend(t *testing.T) {
+	// Cover the ctx.Done() branch in the send-select specifically.
+	// stats is the last step of capture; once it returns the goroutine is
+	// about to hit the send select. We cancel there so the unbuffered ch
+	// is unreadable and ctx.Done() wins.
+	ready := make(chan struct{})
+	mock := defaultMock()
+	mock.stats = func(_ context.Context) (DBStats, error) {
+		close(ready)
+		return DBStats{XactTotal: 100}, nil
+	}
+
+	p := NewPoller(mock, time.Minute) // long interval: only one automatic tick
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch := make(chan PollResult) // unbuffered; nothing reads it
+
+	go p.Run(ctx, ch)
+	<-ready  // capture just finished; goroutine is entering the send select
+	cancel() // ctx.Done() wins over the blocked unbuffered send
+
+	select {
+	case <-ch:
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
 func TestCaptureLongRunningError(t *testing.T) {
 	mock := defaultMock()
 	mock.longRunning = func(_ context.Context, _ time.Duration) ([]Activity, error) {
