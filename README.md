@@ -77,6 +77,12 @@ See `SQL_CATALOG.md` for the candidate SQL per metric, version notes, and verifi
 - Uses `time.NewTimer` (not `time.After`) to avoid timer leaks.
 - TPS skipped when `XactTotal` goes backward (server restart / `pg_stat_reset`).
 
+### DB load
+
+All polled views (`pg_stat_activity`, `pg_locks`, `pg_stat_database`) read from shared memory with no disk I/O. Each query typically completes in < 1ms; total overhead is a few ms/s with negligible CPU impact (< 0.1%). A single persistent connection is reused — no per-poll connection cost.
+
+Note: `pg_stat_statements` (v0.2) can be heavier on systems with many unique queries. Consider polling it at a longer interval or making it opt-in.
+
 ## 7. Error Handling
 
 | Category | Example | UX |
