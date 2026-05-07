@@ -151,8 +151,8 @@ Three key decisions behind this tool:
 ## 10. Roadmap
 
 - [x] v0.1 — Incident dashboard
-- [ ] v0.1.1 — Unit tests + integration tests + CI
-- [ ] v0.1.2 — Query detail overlay (full SQL on `Enter`)
+- [x] v0.1.1 — Unit tests + integration tests + CI
+- [x] v0.1.2 — Query detail overlay (full SQL on `Enter`)
 - [ ] v0.1.3 — Level 1 overview screen — global health indicators with status colors (connections, TPS, cache hit, checkpoint, replication lag, autovacuum)
 - [ ] v0.2 — `pg_stat_statements` integration (slow query history); RDS verification
 - [ ] v0.2.1 — Config file (`~/.pgincident.yml`) — slow query / idle-in-transaction thresholds, default DSN, refresh interval
