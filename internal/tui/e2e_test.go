@@ -185,7 +185,7 @@ func TestE2EDetailOverlayOpenClose(t *testing.T) {
 		s := stripped(bts)
 		return bytes.Contains(s, []byte("Query Detail")) &&
 			bytes.Contains(s, []byte("1001")) &&
-			bytes.Contains(s, []byte("press any key to close"))
+			bytes.Contains(s, []byte("[any key] close"))
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
 
 	// Press any key to dismiss the overlay.

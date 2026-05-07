@@ -90,6 +90,26 @@ func TestWrapText(t *testing.T) {
 	}
 }
 
+func TestHighlightSQL(t *testing.T) {
+	// With NO_COLOR=1 (set by TestMain), lipgloss returns plain text.
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"SELECT 1", "SELECT 1"},
+		{"select count(*) from users", "SELECT COUNT(*) FROM users"},
+		{"WHERE id = 1 AND status = 'active'", "WHERE id = 1 AND status = 'active'"},
+		{"no keywords here", "no keywords here"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		got := highlightSQL(c.in)
+		if got != c.want {
+			t.Errorf("highlightSQL(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestConnPct(t *testing.T) {
 	cases := []struct {
 		active, max int

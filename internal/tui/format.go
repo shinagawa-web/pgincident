@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -63,6 +64,16 @@ func wrapText(s string, width int) string {
 	}
 	lines = append(lines, line)
 	return strings.Join(lines, "\n")
+}
+
+var sqlKeywordRe = regexp.MustCompile(
+	`(?i)\b(SELECT|DISTINCT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|FULL|ON|AND|OR|NOT|IN|EXISTS|HAVING|LIMIT|OFFSET|UNION|ALL|EXCEPT|INTERSECT|INSERT|INTO|UPDATE|DELETE|SET|VALUES|AS|WITH|CASE|WHEN|THEN|ELSE|END|NULL|IS|LIKE|ILIKE|BETWEEN|ASC|DESC|COUNT|SUM|AVG|MIN|MAX|COALESCE|NULLIF|CAST|INTERVAL|GROUP|ORDER|BY|RETURNING|USING|LATERAL|RECURSIVE|TRUE|FALSE)\b`,
+)
+
+func highlightSQL(line string) string {
+	return sqlKeywordRe.ReplaceAllStringFunc(line, func(kw string) string {
+		return sqlKeywordStyle.Render(strings.ToUpper(kw))
+	})
 }
 
 func connPct(active, max int) string {

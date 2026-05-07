@@ -221,22 +221,25 @@ func (a *App) renderHelp() string {
 func (a *App) renderDetail() string {
 	act := a.detailItem
 
-	// sqlWidth: inner content width for the SQL block.
-	// modalStyle adds Padding(1,3)=6 and Border=2, so subtract 8 from modal outer width.
-	modalWidth := a.width * 2 / 3
-	if modalWidth > 80 {
-		modalWidth = 80
+	sep := dimStyle.Render(strings.Repeat("─", a.width))
+
+	// title + sep + sep + footer = 4 fixed rows; SQL fills the rest.
+	sqlRows := a.height - 4
+
+	sqlLines := strings.Split(wrapText(act.Query, a.width), "\n")
+	for i, line := range sqlLines {
+		sqlLines[i] = highlightSQL(line)
 	}
-	sqlWidth := modalWidth - 8
+	for len(sqlLines) < sqlRows {
+		sqlLines = append(sqlLines, "")
+	}
 
-	header := boldStyle.Render(fmt.Sprintf("Query Detail — PID %d", act.PID))
-	meta := fmt.Sprintf("  User:      %s\n  Duration:  %s\n  State:     %s",
-		act.User, formatDuration(act.Duration), act.State)
-	sep := dimStyle.Render(strings.Repeat("─", sqlWidth))
-	sql := wrapText(act.Query, sqlWidth)
-	dismiss := dimStyle.Render("press any key to close")
-
-	content := header + "\n\n" + meta + "\n\n" + sep + "\n" + sql + "\n" + sep + "\n\n" + dismiss
-	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
-		modalStyle.Render(content))
+	parts := []string{
+		boldStyle.Render(fmt.Sprintf("Query Detail — PID %d", act.PID)),
+		sep,
+		strings.Join(sqlLines[:sqlRows], "\n"),
+		sep,
+		footerStyle.Render("[any key] close"),
+	}
+	return strings.Join(parts, "\n")
 }

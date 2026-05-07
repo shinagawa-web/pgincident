@@ -498,23 +498,36 @@ func TestViewDetail(t *testing.T) {
 	if !strings.Contains(v, "1001") {
 		t.Errorf("expected PID 1001 in detail view, got: %q", v)
 	}
-	if !strings.Contains(v, "SELECT count(*) FROM orders") {
+	if !strings.Contains(v, "FROM orders") {
 		t.Errorf("expected full SQL in detail view, got: %q", v)
 	}
-	if !strings.Contains(v, "press any key to close") {
+	if !strings.Contains(v, "[any key] close") {
 		t.Errorf("expected dismiss hint in detail view, got: %q", v)
 	}
 }
 
 func TestViewDetailWideTerminal(t *testing.T) {
 	app := newTestApp()
-	app.width = 150 // triggers modalWidth > 80 clamp
+	app.width = 150
 	act := core.Activity{PID: 2001, User: "bob", Query: "SELECT 1", State: "active"}
 	app.showDetail = true
 	app.detailItem = &act
 	v := app.View()
 	if !strings.Contains(v, "2001") {
 		t.Errorf("expected PID 2001 in detail view on wide terminal, got: %q", v)
+	}
+}
+
+func TestViewDetailSQLFillsHeight(t *testing.T) {
+	app := newTestApp()
+	app.height = 24
+	longSQL := strings.Repeat("SELECT id FROM orders WHERE status = 'pending' AND ", 5) + "TRUE"
+	act := core.Activity{PID: 3001, Query: longSQL, State: "active"}
+	app.showDetail = true
+	app.detailItem = &act
+	lines := strings.Split(app.View(), "\n")
+	if len(lines) != 24 {
+		t.Errorf("detail view should have exactly 24 lines, got %d", len(lines))
 	}
 }
 
