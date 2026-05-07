@@ -77,10 +77,16 @@ var clauseRe = regexp.MustCompile(
 	`(?i) (SELECT|UNION ALL|LEFT OUTER JOIN|RIGHT OUTER JOIN|FULL OUTER JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|CROSS JOIN|GROUP BY|ORDER BY|FROM|WHERE|JOIN|HAVING|LIMIT|OFFSET|UNION|EXCEPT|INTERSECT|RETURNING)\b`,
 )
 
+// subquerySelectRe matches SELECT immediately after an opening parenthesis (CTE / subquery).
+var subquerySelectRe = regexp.MustCompile(`(?i)\(SELECT\b`)
+
 // formatSQL breaks a single-line SQL string at clause boundaries and word-wraps
 // each clause to width. Continuation lines are indented by 2 spaces.
 func formatSQL(s string, width int) string {
 	s = strings.Join(strings.Fields(s), " ")
+	s = subquerySelectRe.ReplaceAllStringFunc(s, func(m string) string {
+		return "(\n" + strings.ToUpper(m[1:]) // "(SELECT" → "(\nSELECT"
+	})
 	s = clauseRe.ReplaceAllString(s, "\n$1 ")
 
 	var lines []string

@@ -172,6 +172,12 @@ func TestFormatSQL(t *testing.T) {
 			width: 80,
 			want:  "",
 		},
+		{
+			name:  "CTE: (SELECT breaks after (",
+			s:     "WITH paused AS (SELECT pg_sleep(60)) SELECT id FROM t WHERE id = 1",
+			width: 80,
+			want:  "WITH paused AS (\nSELECT pg_sleep(60))\nSELECT id\nFROM t\nWHERE id = 1",
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
