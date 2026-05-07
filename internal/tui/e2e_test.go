@@ -149,7 +149,7 @@ func TestGoldenDetailOverlay(t *testing.T) {
 		User:     "alice",
 		Duration: 12 * time.Second,
 		State:    "active",
-		Query:    "SELECT count(*) FROM orders WHERE created_at > NOW() - INTERVAL '1 day' AND status = 'pending'",
+		Query:    "SELECT u.id, u.name, u.email, o.id AS order_id, o.status, o.total_amount, p.name AS product_name FROM users u JOIN orders o ON o.user_id = u.id JOIN order_items oi ON oi.order_id = o.id JOIN products p ON p.id = oi.product_id WHERE u.status = 'active' AND o.created_at > NOW() - INTERVAL '7 days' ORDER BY o.created_at DESC LIMIT 100",
 	}
 	app := &App{
 		pollCh:     make(chan core.PollResult),
