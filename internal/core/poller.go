@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const minInterval = 100 * time.Millisecond
+const minInterval = 1 * time.Second
 
 // Querier is the database interface used by Poller.
 type Querier interface {

@@ -94,11 +94,7 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.poller.SetInterval(a.poller.Interval() + 500*time.Millisecond)
 		a.statusMsg = fmt.Sprintf("interval: %.1fs", a.poller.Interval().Seconds())
 	case "-":
-		d := a.poller.Interval() - 500*time.Millisecond
-		if d < 500*time.Millisecond {
-			d = 500 * time.Millisecond
-		}
-		a.poller.SetInterval(d)
+		a.poller.SetInterval(a.poller.Interval() - 500*time.Millisecond)
 		a.statusMsg = fmt.Sprintf("interval: %.1fs", a.poller.Interval().Seconds())
 	}
 	return a, nil
