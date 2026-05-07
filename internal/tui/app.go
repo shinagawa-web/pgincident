@@ -19,12 +19,21 @@ const (
 
 type snapshotMsg core.PollResult
 
+// Screen identifies which top-level screen is active.
+type Screen int
+
+const (
+	ScreenOverview  Screen = iota // default startup screen
+	ScreenDashboard               // incident dashboard (Level 2)
+)
+
 // App is the root Bubble Tea model.
 type App struct {
 	poller     *core.Poller
 	pollCh     chan core.PollResult
 	cancel     context.CancelFunc
 	snapshot   core.Snapshot
+	screen     Screen
 	section    Section
 	cursor     [sectionCount]int
 	width      int
@@ -92,6 +101,12 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a, tea.Quit
 	case "?":
 		a.showHelp = true
+	case "o":
+		if a.screen == ScreenOverview {
+			a.screen = ScreenDashboard
+		} else {
+			a.screen = ScreenOverview
+		}
 	case "tab":
 		a.section = a.section.next()
 		a.statusMsg = ""
@@ -109,9 +124,11 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.poller.SetInterval(a.poller.Interval() - 500*time.Millisecond)
 		a.statusMsg = fmt.Sprintf("interval: %.1fs", a.poller.Interval().Seconds())
 	case "enter":
-		if act := a.selectedActivity(); act != nil {
-			a.showDetail = true
-			a.detailItem = act
+		if a.screen == ScreenDashboard {
+			if act := a.selectedActivity(); act != nil {
+				a.showDetail = true
+				a.detailItem = act
+			}
 		}
 	}
 	return a, nil
@@ -188,6 +205,10 @@ func (a *App) View() string {
 		return a.renderHelp()
 	}
 
+	if a.screen == ScreenOverview {
+		return a.renderOverview()
+	}
+
 	div := dimStyle.Render(strings.Repeat("─", a.width))
 	dr := a.sectionDataRows()
 
@@ -211,11 +232,12 @@ func (a *App) View() string {
 func (a *App) renderHelp() string {
 	content := boldStyle.Render("pgincident v"+version.Version) + "\n\n" +
 		"  q / Ctrl-C    quit\n" +
+		"  o             overview / dashboard toggle\n" +
 		"  Tab           next section\n" +
 		"  Shift-Tab     previous section\n" +
 		"  ↑ / k         cursor up\n" +
 		"  ↓ / j         cursor down\n" +
-		"  Enter         query detail overlay\n" +
+		"  Enter         query detail overlay (dashboard only)\n" +
 		"  + / -         increase / decrease interval\n" +
 		"  ?             this help\n\n" +
 		dimStyle.Render("press any key to close")

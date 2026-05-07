@@ -19,6 +19,7 @@ func newTestApp() *App {
 		cancel: cancel,
 		width:  100,
 		height: 30,
+		screen: ScreenDashboard, // most tests target Dashboard behavior
 	}
 }
 
@@ -529,6 +530,118 @@ func TestViewDetailSQLFillsHeight(t *testing.T) {
 	if len(lines) != 24 {
 		t.Errorf("detail view should have exactly 24 lines, got %d", len(lines))
 	}
+}
+
+// --- screen transitions ---
+
+func TestHandleKeyOFromOverview(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenOverview
+	model, _ := app.handleKey(key("o"))
+	a := model.(*App)
+	if a.screen != ScreenDashboard {
+		t.Errorf("screen = %v, want ScreenDashboard after o from Overview", a.screen)
+	}
+}
+
+func TestHandleKeyOFromDashboard(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenDashboard
+	model, _ := app.handleKey(key("o"))
+	a := model.(*App)
+	if a.screen != ScreenOverview {
+		t.Errorf("screen = %v, want ScreenOverview after o from Dashboard", a.screen)
+	}
+}
+
+func TestHandleKeyEnterNoOpInOverview(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenOverview
+	app.snapshot.Activities = []core.Activity{{PID: 1, Query: "SELECT 1"}}
+	app.section = SectionActivity
+	model, _ := app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	a := model.(*App)
+	if a.showDetail {
+		t.Error("Enter in Overview should not open detail overlay")
+	}
+}
+
+func TestViewOverview(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenOverview
+	v := app.View()
+	if !strings.Contains(v, "DB Health Overview") {
+		t.Errorf("expected overview heading in view, got: %q", v)
+	}
+	if !strings.Contains(v, "Connections") {
+		t.Errorf("expected Connections metric in overview, got: %q", v)
+	}
+	if !strings.Contains(v, "[o]dashboard") {
+		t.Errorf("expected overview footer hint, got: %q", v)
+	}
+}
+
+func TestViewOverviewNoReplicationRowWhenNoStandbys(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenOverview
+	app.snapshot.DBStats.HasStandbys = false
+	v := app.View()
+	if strings.Contains(v, "Replication lag") {
+		t.Error("expected Replication lag row to be hidden when no standbys")
+	}
+}
+
+func TestViewOverviewReplicationRowVisibleWhenStandbysExist(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenOverview
+	app.snapshot.DBStats.HasStandbys = true
+	app.snapshot.DBStats.ReplicationLagSecs = 0 // caught up but standbys exist
+	v := app.View()
+	if !strings.Contains(v, "Replication lag") {
+		t.Error("expected Replication lag row to be visible when standbys exist even if lag=0")
+	}
+}
+
+func TestViewOverviewTPSNonZero(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenOverview
+	app.snapshot.DBStats.TPS = 1234
+	v := app.View()
+	if !strings.Contains(v, "1234") {
+		t.Errorf("expected TPS value in overview, got: %q", v)
+	}
+}
+
+func TestViewOverviewStatusBadges(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenOverview
+	// connections > 90% → CRIT; cache hit < 95% → CRIT; autovacuum > 5 → CRIT
+	app.snapshot.DBStats.ConnectionsActive = 95
+	app.snapshot.DBStats.ConnectionsMax = 100
+	app.snapshot.DBStats.CacheHitRatio = 0.94
+	app.snapshot.DBStats.AutovacuumWorkers = 6
+	v := app.View()
+	if !strings.Contains(v, "CRIT") {
+		t.Errorf("expected CRIT badge in overview for critical metrics, got: %q", v)
+	}
+	// checkpoint req > 0 → WARN
+	app.snapshot.DBStats.ConnectionsActive = 10
+	app.snapshot.DBStats.CacheHitRatio = 0.999
+	app.snapshot.DBStats.AutovacuumWorkers = 0
+	app.snapshot.DBStats.CheckpointReq = 5
+	v = app.View()
+	if !strings.Contains(v, "WARN") {
+		t.Errorf("expected WARN badge in overview for warning metrics, got: %q", v)
+	}
+}
+
+func TestNewDefaultsToOverview(t *testing.T) {
+	poller := core.NewPoller(&mockQuerier{}, time.Second)
+	app := New(poller)
+	if app.screen != ScreenOverview {
+		t.Errorf("New() screen = %v, want ScreenOverview", app.screen)
+	}
+	app.cancel()
 }
 
 // --- New ---

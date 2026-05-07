@@ -24,6 +24,10 @@ func TestStats(t *testing.T) {
 			*dest[1].(*int) = 100
 			*dest[2].(*int64) = 5000
 			*dest[3].(*float64) = 0.99
+			*dest[4].(*int64) = 3
+			*dest[5].(*bool) = true
+			*dest[6].(*float64) = 12.4
+			*dest[7].(*int) = 2
 			return nil
 		},
 	}
@@ -43,6 +47,18 @@ func TestStats(t *testing.T) {
 	}
 	if s.CacheHitRatio != 0.99 {
 		t.Errorf("CacheHitRatio = %v, want 0.99", s.CacheHitRatio)
+	}
+	if s.CheckpointReq != 3 {
+		t.Errorf("CheckpointReq = %d, want 3", s.CheckpointReq)
+	}
+	if !s.HasStandbys {
+		t.Error("HasStandbys = false, want true")
+	}
+	if s.ReplicationLagSecs != 12.4 {
+		t.Errorf("ReplicationLagSecs = %v, want 12.4", s.ReplicationLagSecs)
+	}
+	if s.AutovacuumWorkers != 2 {
+		t.Errorf("AutovacuumWorkers = %d, want 2", s.AutovacuumWorkers)
 	}
 }
 
