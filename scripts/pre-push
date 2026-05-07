@@ -18,7 +18,14 @@ echo "==> Linting..."
 go vet ./...
 
 echo "==> Running unit tests..."
-env -u DATABASE_URL go test -race ./internal/...
+env -u DATABASE_URL go test -race -coverprofile=coverage.out -covermode=atomic ./internal/...
+
+echo "==> Checking coverage..."
+COVERAGE=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}' | tr -d '%')
+if [ "$(echo "$COVERAGE < 100" | bc)" = "1" ]; then
+  echo "Coverage ${COVERAGE}% is below 100% — add tests before pushing"
+  exit 1
+fi
 
 if [ -n "$DATABASE_URL" ]; then
   echo "==> Running integration tests..."
