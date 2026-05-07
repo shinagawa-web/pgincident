@@ -83,6 +83,20 @@ func TestGoldenMainView(t *testing.T) {
 		width:    120,
 		height:   40,
 		snapshot: e2eSnapshot(),
+		screen:   ScreenDashboard,
+	}
+	golden.RequireEqual(t, []byte(ansi.Strip(app.View())))
+}
+
+func TestGoldenOverviewView(t *testing.T) {
+	app := &App{
+		pollCh:   make(chan core.PollResult),
+		cancel:   func() {},
+		poller:   core.NewPoller(nil, time.Second),
+		width:    120,
+		height:   40,
+		snapshot: e2eSnapshot(),
+		screen:   ScreenOverview,
 	}
 	golden.RequireEqual(t, []byte(ansi.Strip(app.View())))
 }
@@ -172,7 +186,13 @@ func TestE2EDetailOverlayOpenClose(t *testing.T) {
 	tm := teatest.NewTestModel(t, app, teatest.WithInitialTermSize(120, 40))
 	t.Cleanup(func() { tm.Quit() })
 
-	// Wait for initial render with the activity row visible.
+	// Wait for Overview to render, then switch to Dashboard.
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		return bytes.Contains(stripped(bts), []byte("DB Health Overview"))
+	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+
+	// Wait for the activity row to be visible in the Dashboard.
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		return bytes.Contains(stripped(bts), []byte("SELECT count(*) FROM orders"))
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
@@ -207,7 +227,12 @@ func TestE2EDetailOverlayLocksNoOp(t *testing.T) {
 	app := newE2EApp(t, snap)
 	tm := teatest.NewTestModel(t, app, teatest.WithInitialTermSize(120, 40))
 
-	// Wait for initial render then navigate to Locks section.
+	// Switch to Dashboard first, then navigate to Locks section.
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		return bytes.Contains(stripped(bts), []byte("DB Health Overview"))
+	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		return bytes.Contains(stripped(bts), []byte("▶ Long-running queries"))
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
@@ -239,7 +264,13 @@ func TestE2ETabNavigation(t *testing.T) {
 	tm := teatest.NewTestModel(t, app, teatest.WithInitialTermSize(120, 40))
 	t.Cleanup(func() { tm.Quit() })
 
-	// Wait for initial render with Activity section active.
+	// Switch to Dashboard first.
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		return bytes.Contains(stripped(bts), []byte("DB Health Overview"))
+	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+
+	// Wait for Activity section to be active.
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		return bytes.Contains(stripped(bts), []byte("▶ Long-running queries"))
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))

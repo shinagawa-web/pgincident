@@ -9,12 +9,12 @@
                                                                                                                         
                                                                                                                         
                                                                                                                         
-                                                                                                                        
                                   ╭──────────────────────────────────────────────────╮                                  
                                   │                                                  │                                  
                                   │   pgincident v0.1.0                              │                                  
                                   │                                                  │                                  
                                   │     q / Ctrl-C    quit                           │                                  
+                                  │     o             overview / dashboard toggle    │                                  
                                   │     Tab           next section                   │                                  
                                   │     Shift-Tab     previous section               │                                  
                                   │     ↑ / k         cursor up                      │                                  

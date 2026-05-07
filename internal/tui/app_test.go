@@ -19,6 +19,7 @@ func newTestApp() *App {
 		cancel: cancel,
 		width:  100,
 		height: 30,
+		screen: ScreenDashboard, // most tests target Dashboard behavior
 	}
 }
 
@@ -529,6 +530,84 @@ func TestViewDetailSQLFillsHeight(t *testing.T) {
 	if len(lines) != 24 {
 		t.Errorf("detail view should have exactly 24 lines, got %d", len(lines))
 	}
+}
+
+// --- screen transitions ---
+
+func TestHandleKeyOFromOverview(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenOverview
+	model, _ := app.handleKey(key("o"))
+	a := model.(*App)
+	if a.screen != ScreenDashboard {
+		t.Errorf("screen = %v, want ScreenDashboard after o from Overview", a.screen)
+	}
+}
+
+func TestHandleKeyOFromDashboard(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenDashboard
+	model, _ := app.handleKey(key("o"))
+	a := model.(*App)
+	if a.screen != ScreenOverview {
+		t.Errorf("screen = %v, want ScreenOverview after o from Dashboard", a.screen)
+	}
+}
+
+func TestHandleKeyEnterNoOpInOverview(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenOverview
+	app.snapshot.Activities = []core.Activity{{PID: 1, Query: "SELECT 1"}}
+	app.section = SectionActivity
+	model, _ := app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	a := model.(*App)
+	if a.showDetail {
+		t.Error("Enter in Overview should not open detail overlay")
+	}
+}
+
+func TestViewOverview(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenOverview
+	v := app.View()
+	if !strings.Contains(v, "DB Health Overview") {
+		t.Errorf("expected overview heading in view, got: %q", v)
+	}
+	if !strings.Contains(v, "Connections") {
+		t.Errorf("expected Connections metric in overview, got: %q", v)
+	}
+	if !strings.Contains(v, "[o]dashboard") {
+		t.Errorf("expected overview footer hint, got: %q", v)
+	}
+}
+
+func TestViewOverviewNoReplicationRowWhenZero(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenOverview
+	app.snapshot.DBStats.ReplicationLagSecs = 0
+	v := app.View()
+	if strings.Contains(v, "Replication lag") {
+		t.Error("expected Replication lag row to be hidden when lag=0")
+	}
+}
+
+func TestViewOverviewReplicationRowVisible(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenOverview
+	app.snapshot.DBStats.ReplicationLagSecs = 12.4
+	v := app.View()
+	if !strings.Contains(v, "Replication lag") {
+		t.Error("expected Replication lag row to be visible when lag>0")
+	}
+}
+
+func TestNewDefaultsToOverview(t *testing.T) {
+	poller := core.NewPoller(&mockQuerier{}, time.Second)
+	app := New(poller)
+	if app.screen != ScreenOverview {
+		t.Errorf("New() screen = %v, want ScreenOverview", app.screen)
+	}
+	app.cancel()
 }
 
 // --- New ---

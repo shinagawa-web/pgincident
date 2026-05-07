@@ -1,38 +1,15 @@
 pgincident v0.1.0                                                    connected: localhost:5432 (PG 16.1)  interval: 1.0s
-Connections: 3/100 (3%)   TPS: —   Cache hit: 99.0%
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-▶ Long-running queries (> 5s)                                                                                 [1 active]
-  PID    USER          DURATION     STATE       QUERY
-▸ 1001   alice         00:00:12     active      SELECT count(*) FROM orders
-
-
-
-
-
-
-
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  Locks (waiting)                                                                                            [0 waiting]
-  BLOCKED BLOCKING WAIT TIME    RELATION            MODE
-
-
-
-
-
-
-
-
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  Idle in transaction (> 30s)                                                                                   [0 idle]
-  PID    USER          IDLE TIME    LAST QUERY
-
-
-
-
-
-
-
-
+  DB Health Overview
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-[q]uit  [Tab]section  [↑↓/jk]cursor  [o]overview  [Enter]detail  [+/-]interval  [?]help
+  Metric                Value                 Status
+  ──────────────────────────────────────────────────
+  Connections           3 / 100 (3%)          OK
+  TPS                   —                     OK
+  Cache hit             99.0%                 OK
+  Checkpoints           req: 0                OK
+  Autovacuum            0 workers             OK
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+[o]dashboard  [q]uit  [+/-]interval  [?]help

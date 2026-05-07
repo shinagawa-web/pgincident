@@ -27,11 +27,14 @@ type Lock struct {
 
 // DBStats holds the header metrics.
 type DBStats struct {
-	ConnectionsActive int
-	ConnectionsMax    int
-	TPS               float64
-	CacheHitRatio     float64
-	XactTotal         int64 // raw cumulative value; used for TPS delta, not displayed
+	ConnectionsActive  int
+	ConnectionsMax     int
+	TPS                float64
+	CacheHitRatio      float64
+	XactTotal          int64   // raw cumulative value; used for TPS delta, not displayed
+	CheckpointReq      int64   // checkpoints triggered by WAL pressure since last reset
+	ReplicationLagSecs float64 // max lag across all standbys in seconds; 0 if no standbys
+	AutovacuumWorkers  int     // number of active autovacuum worker processes
 }
 
 // Snapshot is a single point-in-time capture of all dashboard data.
