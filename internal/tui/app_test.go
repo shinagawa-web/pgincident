@@ -376,11 +376,11 @@ func TestHandleKeyIntervalDecrease(t *testing.T) {
 
 func TestHandleKeyIntervalDecreaseClamp(t *testing.T) {
 	app := newTestApp()
-	app.poller = core.NewPoller(nil, 500*time.Millisecond)
+	app.poller = core.NewPoller(nil, 1*time.Second) // already at minimum
 	model, _ := app.handleKey(key("-"))
 	a := model.(*App)
-	if a.poller.Interval() < 500*time.Millisecond {
-		t.Errorf("interval should not drop below 500ms, got %v", a.poller.Interval())
+	if a.poller.Interval() != 1*time.Second {
+		t.Errorf("interval should stay at 1s when already at minimum, got %v", a.poller.Interval())
 	}
 }
 

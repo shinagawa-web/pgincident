@@ -26,7 +26,7 @@ func main() {
 	}
 	defer client.Close(ctx)
 
-	poller := core.NewPoller(client, time.Second)
+	poller := core.NewPoller(client, 5*time.Second)
 	app := tui.New(poller)
 
 	p := tea.NewProgram(app, tea.WithAltScreen())

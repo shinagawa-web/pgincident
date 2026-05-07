@@ -28,7 +28,7 @@ Targets SREs and Web engineers who reach for `psql -c "SELECT * FROM pg_stat_act
 ### 2.1 Single-screen Incident Dashboard
 
 ```
-pgincident v0.1.0              connected: 10.0.1.42:5432 (PG 16.1)  interval: 1.0s
+pgincident v0.1.0              connected: 10.0.1.42:5432 (PG 16.1)  interval: 5.0s
 Connections: 142/200 (71%)   TPS: 2340   Cache hit: 99.2%
 ─────────────────────────────────────────────────────────────────────────────────
 Long-running queries (> 5s)                                         [12 active]
@@ -74,7 +74,7 @@ See `SQL_CATALOG.md` for the candidate SQL per metric, version notes, and verifi
 
 ## 6. Update Loop
 
-- Default interval: 1 second. Adjustable with `+` / `-` (minimum 500ms). See issue [#12](https://github.com/shinagawa-web/pgincident/issues/12) for planned change to 5s default / 1s minimum.
+- Default interval: 5 seconds. Adjustable with `+` / `-` (minimum 1s).
 - Poller runs in a background goroutine, sends `PollResult` to TUI via channel. TUI never blocks on DB.
 - Uses `time.NewTimer` (not `time.After`) to avoid timer leaks.
 - TPS skipped when `XactTotal` goes backward (server restart / `pg_stat_reset`).
