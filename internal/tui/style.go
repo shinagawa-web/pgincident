@@ -24,4 +24,6 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("214")).
 			Padding(1, 3)
+
+	sqlKeywordStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("75")).Bold(true)
 )

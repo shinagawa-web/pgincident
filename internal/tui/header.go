@@ -48,7 +48,7 @@ func renderStatus(err error, msg string) string {
 }
 
 func renderFooter() string {
-	return footerStyle.Render("[q]uit  [Tab]section  [↑↓/jk]cursor  [+/-]interval  [?]help")
+	return footerStyle.Render("[q]uit  [Tab]section  [↑↓/jk]cursor  [Enter]detail  [+/-]interval  [?]help")
 }
 
 // sectionTitle renders a title row with the count badge right-aligned.

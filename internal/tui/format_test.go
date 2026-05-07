@@ -68,6 +68,128 @@ func TestPadRight(t *testing.T) {
 	}
 }
 
+func TestOneLine(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"SELECT 1", "SELECT 1"},
+		{"SELECT\n1", "SELECT 1"},
+		{"WITH paused AS (SELECT pg_sleep(60))\nSELECT id FROM t", "WITH paused AS (SELECT pg_sleep(60)) SELECT id FROM t"},
+		{"  multiple   spaces  ", "multiple spaces"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		got := oneLine(c.in)
+		if got != c.want {
+			t.Errorf("oneLine(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestWrapText(t *testing.T) {
+	cases := []struct {
+		s     string
+		width int
+		want  string
+	}{
+		{"hello world", 20, "hello world"},
+		{"hello world", 5, "hello\nworld"},
+		{"one two three", 7, "one two\nthree"},
+		{"", 10, ""},
+		{"single", 6, "single"},
+		{"a b c", 1, "a\nb\nc"},
+		{"hello world", 0, "hello world"},
+	}
+	for _, c := range cases {
+		got := wrapText(c.s, c.width)
+		if got != c.want {
+			t.Errorf("wrapText(%q, %d) = %q, want %q", c.s, c.width, got, c.want)
+		}
+	}
+}
+
+func TestHighlightSQL(t *testing.T) {
+	// With NO_COLOR=1 (set by TestMain), lipgloss returns plain text.
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"SELECT 1", "SELECT 1"},
+		{"select count(*) from users", "SELECT COUNT(*) FROM users"},
+		{"WHERE id = 1 AND status = 'active'", "WHERE id = 1 AND status = 'active'"},
+		{"WHERE note = 'select'", "WHERE note = 'select'"},
+		{"no keywords here", "no keywords here"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		got := highlightSQL(c.in)
+		if got != c.want {
+			t.Errorf("highlightSQL(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestFormatSQL(t *testing.T) {
+	cases := []struct {
+		name  string
+		s     string
+		width int
+		want  string
+	}{
+		{
+			name:  "clause breaks",
+			s:     "SELECT id FROM users WHERE status = 'active' ORDER BY id LIMIT 10",
+			width: 80,
+			want:  "SELECT id\nFROM users\nWHERE status = 'active'\nORDER BY id\nLIMIT 10",
+		},
+		{
+			name:  "join variants",
+			s:     "SELECT a.id FROM a LEFT JOIN b ON b.a_id = a.id INNER JOIN c ON c.id = b.c_id",
+			width: 80,
+			want:  "SELECT a.id\nFROM a\nLEFT JOIN b ON b.a_id = a.id\nINNER JOIN c ON c.id = b.c_id",
+		},
+		{
+			name:  "long clause wraps with indent",
+			s:     "SELECT very_long_column_one, very_long_column_two, very_long_column_three FROM t",
+			width: 40,
+			want:  "SELECT very_long_column_one,\n  very_long_column_two,\n  very_long_column_three\nFROM t",
+		},
+		{
+			name:  "normalises whitespace",
+			s:     "SELECT  id   FROM   users",
+			width: 80,
+			want:  "SELECT id\nFROM users",
+		},
+		{
+			name:  "no clause keywords",
+			s:     "pg_sleep(10)",
+			width: 80,
+			want:  "pg_sleep(10)",
+		},
+		{
+			name:  "empty string",
+			s:     "",
+			width: 80,
+			want:  "",
+		},
+		{
+			name:  "CTE: (SELECT breaks after (",
+			s:     "WITH paused AS (SELECT pg_sleep(60)) SELECT id FROM t WHERE id = 1",
+			width: 80,
+			want:  "WITH paused AS (\nSELECT pg_sleep(60))\nSELECT id\nFROM t\nWHERE id = 1",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := formatSQL(c.s, c.width)
+			if got != c.want {
+				t.Errorf("formatSQL(%q, %d)\ngot:  %q\nwant: %q", c.s, c.width, got, c.want)
+			}
+		})
+	}
+}
+
 func TestConnPct(t *testing.T) {
 	cases := []struct {
 		active, max int

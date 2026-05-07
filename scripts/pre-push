@@ -17,8 +17,20 @@ go build ./...
 echo "==> Linting..."
 go vet ./...
 
+COVERAGE_TMP=$(mktemp)
+trap 'rm -f "$COVERAGE_TMP"' EXIT
+
 echo "==> Running unit tests..."
-env -u DATABASE_URL go test -race ./internal/...
+env -u DATABASE_URL go test -race -coverprofile="$COVERAGE_TMP" -covermode=atomic ./internal/...
+
+echo "==> Checking coverage..."
+COVERAGE=$(go tool cover -func="$COVERAGE_TMP" | awk '/^total:/ { gsub(/%/, "", $3); print $3 }')
+if awk -v c="$COVERAGE" 'BEGIN { exit (c+0 < 100 ? 1 : 0) }'; then
+  : # 100% ok
+else
+  echo "Coverage ${COVERAGE}% is below 100% — add tests before pushing"
+  exit 1
+fi
 
 if [ -n "$DATABASE_URL" ]; then
   echo "==> Running integration tests..."

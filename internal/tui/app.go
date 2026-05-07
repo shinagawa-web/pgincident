@@ -12,22 +12,29 @@ import (
 	"github.com/shinagawa-web/pgincident/internal/version"
 )
 
+const (
+	minWidth  = 80
+	minHeight = 24
+)
+
 type snapshotMsg core.PollResult
 
 // App is the root Bubble Tea model.
 type App struct {
-	poller    *core.Poller
-	pollCh    chan core.PollResult
-	cancel    context.CancelFunc
-	snapshot  core.Snapshot
-	section   Section
-	cursor    [sectionCount]int
-	width     int
-	height    int
-	lastErr   error
-	statusMsg string
-	showHelp  bool
-	quitting  bool
+	poller     *core.Poller
+	pollCh     chan core.PollResult
+	cancel     context.CancelFunc
+	snapshot   core.Snapshot
+	section    Section
+	cursor     [sectionCount]int
+	width      int
+	height     int
+	lastErr    error
+	statusMsg  string
+	showHelp   bool
+	showDetail bool
+	detailItem *core.Activity
+	quitting   bool
 }
 
 func New(poller *core.Poller) *App {
@@ -68,6 +75,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if a.showDetail {
+		a.showDetail = false
+		a.detailItem = nil
+		return a, nil
+	}
 	if a.showHelp {
 		a.showHelp = false
 		return a, nil
@@ -96,8 +108,27 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "-":
 		a.poller.SetInterval(a.poller.Interval() - 500*time.Millisecond)
 		a.statusMsg = fmt.Sprintf("interval: %.1fs", a.poller.Interval().Seconds())
+	case "enter":
+		if act := a.selectedActivity(); act != nil {
+			a.showDetail = true
+			a.detailItem = act
+		}
 	}
 	return a, nil
+}
+
+func (a *App) selectedActivity() *core.Activity {
+	switch a.section {
+	case SectionActivity:
+		if i := a.cursor[SectionActivity]; i < len(a.snapshot.Activities) {
+			return &a.snapshot.Activities[i]
+		}
+	case SectionIdle:
+		if i := a.cursor[SectionIdle]; i < len(a.snapshot.IdleInTx) {
+			return &a.snapshot.IdleInTx[i]
+		}
+	}
+	return nil
 }
 
 func (a *App) moveCursor(delta int) {
@@ -144,12 +175,15 @@ func (a *App) View() string {
 	if a.width == 0 {
 		return "loading…"
 	}
-	if a.width < 80 || a.height < 24 {
-		msg := fmt.Sprintf("Terminal too small (%d×%d).\nResize to at least 80×24.", a.width, a.height)
+	if a.width < minWidth || a.height < minHeight {
+		msg := fmt.Sprintf("Terminal too small (%d×%d).\nResize to at least %d×%d.", a.width, a.height, minWidth, minHeight)
 		return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
 			warnStyle.Render(msg))
 	}
 
+	if a.showDetail && a.detailItem != nil {
+		return a.renderDetail()
+	}
 	if a.showHelp {
 		return a.renderHelp()
 	}
@@ -181,9 +215,36 @@ func (a *App) renderHelp() string {
 		"  Shift-Tab     previous section\n" +
 		"  ↑ / k         cursor up\n" +
 		"  ↓ / j         cursor down\n" +
+		"  Enter         query detail overlay\n" +
 		"  + / -         increase / decrease interval\n" +
 		"  ?             this help\n\n" +
 		dimStyle.Render("press any key to close")
 	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
 		modalStyle.Render(content))
+}
+
+func (a *App) renderDetail() string {
+	act := a.detailItem
+
+	sep := dimStyle.Render(strings.Repeat("─", a.width))
+
+	// title + sep + sep + footer = 4 fixed rows; SQL fills the rest.
+	sqlRows := a.height - 4
+
+	sqlLines := strings.Split(formatSQL(act.Query, a.width), "\n")
+	for i, line := range sqlLines {
+		sqlLines[i] = highlightSQL(line)
+	}
+	for len(sqlLines) < sqlRows {
+		sqlLines = append(sqlLines, "")
+	}
+
+	parts := []string{
+		boldStyle.Render(fmt.Sprintf("Query Detail — PID %d", act.PID)),
+		sep,
+		strings.Join(sqlLines[:sqlRows], "\n"),
+		sep,
+		footerStyle.Render("[any key] close"),
+	}
+	return strings.Join(parts, "\n")
 }

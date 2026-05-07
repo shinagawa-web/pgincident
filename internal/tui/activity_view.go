@@ -39,7 +39,7 @@ func renderActivitySection(activities []core.Activity, cursor int, active bool, 
 			padRight(a.User, colUser) +
 			padRight(formatDuration(a.Duration), colDuration) +
 			padRight(a.State, colState) +
-			truncate(a.Query, colQuery)
+			truncate(oneLine(a.Query), colQuery)
 		if active && i == cursor {
 			lines = append(lines, selectedRowStyle.Render("▸ "+row))
 		} else {
