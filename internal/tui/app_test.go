@@ -788,6 +788,55 @@ func TestNew(t *testing.T) {
 	app.cancel()
 }
 
+// --- clampScroll ---
+
+func TestClampScrollNilItem(t *testing.T) {
+	app := newTestApp()
+	if got := app.clampScroll(5); got != 0 {
+		t.Errorf("clampScroll with nil detailItem = %d, want 0", got)
+	}
+}
+
+func TestClampScrollNoOverflow(t *testing.T) {
+	app := newTestApp()
+	act := core.Activity{PID: 1, Query: "SELECT 1"}
+	app.detailItem = &act
+	// 1 formatted line; sqlRows = height(30)-4 = 26 → maxScroll ≤ 0
+	if got := app.clampScroll(5); got != 0 {
+		t.Errorf("clampScroll with no overflow = %d, want 0", got)
+	}
+}
+
+func TestClampScrollNegativeOffset(t *testing.T) {
+	app := detailApp()
+	if got := app.clampScroll(-1); got != 0 {
+		t.Errorf("clampScroll(-1) = %d, want 0", got)
+	}
+}
+
+func TestUpdateWindowSizeDetailOpen(t *testing.T) {
+	app := detailApp()
+	app.detailScroll = 5
+	// Resize to a very tall terminal: sqlRows = 50-4 = 46 > 31 lines → maxScroll=0 → scroll clamped.
+	model, _ := app.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
+	a := model.(*App)
+	if a.detailScroll != 0 {
+		t.Errorf("detailScroll = %d, want 0 after resize clamp", a.detailScroll)
+	}
+}
+
+func TestRenderDetailStartBeyondTotal(t *testing.T) {
+	app := newTestApp()
+	act := core.Activity{PID: 7000, Query: "SELECT 1"}
+	app.showDetail = true
+	app.detailItem = &act
+	app.detailScroll = 999 // beyond total; start should clamp to total
+	v := app.View()
+	if !strings.Contains(v, "7000") {
+		t.Errorf("expected PID in detail view with out-of-range scroll, got: %q", v)
+	}
+}
+
 // --- Init ---
 
 func TestInit(t *testing.T) {
