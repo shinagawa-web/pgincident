@@ -30,7 +30,7 @@ func renderIdleSection(idle []core.Activity, cursor int, active bool, maxRows, w
 		row := padRight(fmt.Sprintf("%d", a.PID), colPID) +
 			padRight(a.User, colUser) +
 			padRight(formatDuration(a.Duration), colIdleTime) +
-			truncate(a.Query, colQuery)
+			truncate(oneLine(a.Query), colQuery)
 		if active && i == cursor {
 			lines = append(lines, selectedRowStyle.Render("▸ "+row))
 		} else {

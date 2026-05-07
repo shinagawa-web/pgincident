@@ -68,6 +68,25 @@ func TestPadRight(t *testing.T) {
 	}
 }
 
+func TestOneLine(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"SELECT 1", "SELECT 1"},
+		{"SELECT\n1", "SELECT 1"},
+		{"WITH paused AS (SELECT pg_sleep(60))\nSELECT id FROM t", "WITH paused AS (SELECT pg_sleep(60)) SELECT id FROM t"},
+		{"  multiple   spaces  ", "multiple spaces"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		got := oneLine(c.in)
+		if got != c.want {
+			t.Errorf("oneLine(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestWrapText(t *testing.T) {
 	cases := []struct {
 		s     string

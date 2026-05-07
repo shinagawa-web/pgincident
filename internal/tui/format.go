@@ -43,6 +43,11 @@ func padRight(s string, n int) string {
 	}
 }
 
+// oneLine collapses all whitespace runs (including newlines) to a single space.
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
 // wrapText wraps s to at most width runes per line, breaking on whitespace.
 func wrapText(s string, width int) string {
 	if width <= 0 {
@@ -69,7 +74,7 @@ func wrapText(s string, width int) string {
 // clauseRe matches major SQL clause keywords preceded by a space.
 // Longer alternatives are listed first to avoid partial matches (e.g. LEFT JOIN before JOIN).
 var clauseRe = regexp.MustCompile(
-	`(?i) (UNION ALL|LEFT OUTER JOIN|RIGHT OUTER JOIN|FULL OUTER JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|CROSS JOIN|GROUP BY|ORDER BY|FROM|WHERE|JOIN|HAVING|LIMIT|OFFSET|UNION|EXCEPT|INTERSECT|RETURNING)\b`,
+	`(?i) (SELECT|UNION ALL|LEFT OUTER JOIN|RIGHT OUTER JOIN|FULL OUTER JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|CROSS JOIN|GROUP BY|ORDER BY|FROM|WHERE|JOIN|HAVING|LIMIT|OFFSET|UNION|EXCEPT|INTERSECT|RETURNING)\b`,
 )
 
 // formatSQL breaks a single-line SQL string at clause boundaries and word-wraps
