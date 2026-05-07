@@ -44,14 +44,14 @@ Each scenario requires separate terminal windows.
 
 Terminal 1 — run a realistic multi-clause query that blocks for 60 s:
 ```bash
-docker compose exec postgres psql -U postgres -c "
+docker compose exec -T postgres psql -U postgres << 'EOF'
 WITH paused AS (SELECT pg_sleep(60))
 SELECT a.pid, a.usename, a.state, l.relation::regclass AS locked_relation, l.mode
 FROM paused, pg_locks l
 JOIN pg_stat_activity a ON a.pid = l.pid
 WHERE l.granted = true
 ORDER BY a.query_start;
-"
+EOF
 ```
 Terminal 2 — run the TUI, select the row with `↓/j` and press `Enter` to verify the
 detail overlay shows the query formatted with clause breaks and keyword highlighting:
