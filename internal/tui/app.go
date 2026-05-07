@@ -12,6 +12,11 @@ import (
 	"github.com/shinagawa-web/pgincident/internal/version"
 )
 
+const (
+	minWidth  = 80
+	minHeight = 24
+)
+
 type snapshotMsg core.PollResult
 
 // App is the root Bubble Tea model.
@@ -170,8 +175,8 @@ func (a *App) View() string {
 	if a.width == 0 {
 		return "loading…"
 	}
-	if a.width < 80 || a.height < 24 {
-		msg := fmt.Sprintf("Terminal too small (%d×%d).\nResize to at least 80×24.", a.width, a.height)
+	if a.width < minWidth || a.height < minHeight {
+		msg := fmt.Sprintf("Terminal too small (%d×%d).\nResize to at least %d×%d.", a.width, a.height, minWidth, minHeight)
 		return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
 			warnStyle.Render(msg))
 	}
