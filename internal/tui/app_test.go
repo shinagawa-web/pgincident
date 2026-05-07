@@ -506,6 +506,18 @@ func TestViewDetail(t *testing.T) {
 	}
 }
 
+func TestViewDetailWideTerminal(t *testing.T) {
+	app := newTestApp()
+	app.width = 150 // triggers modalWidth > 80 clamp
+	act := core.Activity{PID: 2001, User: "bob", Query: "SELECT 1", State: "active"}
+	app.showDetail = true
+	app.detailItem = &act
+	v := app.View()
+	if !strings.Contains(v, "2001") {
+		t.Errorf("expected PID 2001 in detail view on wide terminal, got: %q", v)
+	}
+}
+
 // --- New ---
 
 type mockQuerier struct{}

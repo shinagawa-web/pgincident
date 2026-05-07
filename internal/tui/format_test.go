@@ -68,6 +68,28 @@ func TestPadRight(t *testing.T) {
 	}
 }
 
+func TestWrapText(t *testing.T) {
+	cases := []struct {
+		s     string
+		width int
+		want  string
+	}{
+		{"hello world", 20, "hello world"},
+		{"hello world", 5, "hello\nworld"},
+		{"one two three", 7, "one two\nthree"},
+		{"", 10, ""},
+		{"single", 6, "single"},
+		{"a b c", 1, "a\nb\nc"},
+		{"hello world", 0, "hello world"},
+	}
+	for _, c := range cases {
+		got := wrapText(c.s, c.width)
+		if got != c.want {
+			t.Errorf("wrapText(%q, %d) = %q, want %q", c.s, c.width, got, c.want)
+		}
+	}
+}
+
 func TestConnPct(t *testing.T) {
 	cases := []struct {
 		active, max int

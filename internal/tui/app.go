@@ -227,9 +227,6 @@ func (a *App) renderDetail() string {
 	if modalWidth > 80 {
 		modalWidth = 80
 	}
-	if modalWidth < 40 {
-		modalWidth = 40
-	}
 	sqlWidth := modalWidth - 8
 
 	header := boldStyle.Render(fmt.Sprintf("Query Detail — PID %d", act.PID))
