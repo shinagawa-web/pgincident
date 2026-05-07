@@ -16,18 +16,20 @@ type snapshotMsg core.PollResult
 
 // App is the root Bubble Tea model.
 type App struct {
-	poller    *core.Poller
-	pollCh    chan core.PollResult
-	cancel    context.CancelFunc
-	snapshot  core.Snapshot
-	section   Section
-	cursor    [sectionCount]int
-	width     int
-	height    int
-	lastErr   error
-	statusMsg string
-	showHelp  bool
-	quitting  bool
+	poller     *core.Poller
+	pollCh     chan core.PollResult
+	cancel     context.CancelFunc
+	snapshot   core.Snapshot
+	section    Section
+	cursor     [sectionCount]int
+	width      int
+	height     int
+	lastErr    error
+	statusMsg  string
+	showHelp   bool
+	showDetail bool
+	detailItem *core.Activity
+	quitting   bool
 }
 
 func New(poller *core.Poller) *App {
@@ -68,6 +70,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if a.showDetail {
+		a.showDetail = false
+		a.detailItem = nil
+		return a, nil
+	}
 	if a.showHelp {
 		a.showHelp = false
 		return a, nil
@@ -100,8 +107,27 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		a.poller.SetInterval(d)
 		a.statusMsg = fmt.Sprintf("interval: %.1fs", a.poller.Interval().Seconds())
+	case "enter":
+		if act := a.selectedActivity(); act != nil {
+			a.showDetail = true
+			a.detailItem = act
+		}
 	}
 	return a, nil
+}
+
+func (a *App) selectedActivity() *core.Activity {
+	switch a.section {
+	case SectionActivity:
+		if i := a.cursor[SectionActivity]; i < len(a.snapshot.Activities) {
+			return &a.snapshot.Activities[i]
+		}
+	case SectionIdle:
+		if i := a.cursor[SectionIdle]; i < len(a.snapshot.IdleInTx) {
+			return &a.snapshot.IdleInTx[i]
+		}
+	}
+	return nil
 }
 
 func (a *App) moveCursor(delta int) {
@@ -154,6 +180,9 @@ func (a *App) View() string {
 			warnStyle.Render(msg))
 	}
 
+	if a.showDetail && a.detailItem != nil {
+		return a.renderDetail()
+	}
 	if a.showHelp {
 		return a.renderHelp()
 	}
@@ -185,9 +214,33 @@ func (a *App) renderHelp() string {
 		"  Shift-Tab     previous section\n" +
 		"  ↑ / k         cursor up\n" +
 		"  ↓ / j         cursor down\n" +
+		"  Enter         query detail overlay\n" +
 		"  + / -         increase / decrease interval\n" +
 		"  ?             this help\n\n" +
 		dimStyle.Render("press any key to close")
+	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
+		modalStyle.Render(content))
+}
+
+func (a *App) renderDetail() string {
+	act := a.detailItem
+
+	modalWidth := a.width * 2 / 3
+	if modalWidth > 80 {
+		modalWidth = 80
+	}
+	if modalWidth < 40 {
+		modalWidth = 40
+	}
+	sqlWidth := modalWidth - 8 // padding(2×2) + border(2) + modal padding(2)
+
+	header := boldStyle.Render(fmt.Sprintf("Query Detail — PID %d", act.PID))
+	meta := fmt.Sprintf("  User:      %s\n  Duration:  %s\n  State:     %s",
+		act.User, formatDuration(act.Duration), act.State)
+	sqlBlock := detailSQLStyle.Width(sqlWidth).Render(act.Query)
+	dismiss := dimStyle.Render("press any key to close")
+
+	content := header + "\n\n" + meta + "\n\n" + sqlBlock + "\n\n" + dismiss
 	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
 		modalStyle.Render(content))
 }

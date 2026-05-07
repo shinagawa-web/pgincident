@@ -384,6 +384,128 @@ func TestHandleKeyIntervalDecreaseClamp(t *testing.T) {
 	}
 }
 
+// --- selectedActivity ---
+
+func TestSelectedActivityActivity(t *testing.T) {
+	app := newTestApp()
+	app.snapshot.Activities = []core.Activity{{PID: 42, Query: "SELECT 1"}}
+	app.section = SectionActivity
+	got := app.selectedActivity()
+	if got == nil || got.PID != 42 {
+		t.Errorf("selectedActivity = %v, want PID 42", got)
+	}
+}
+
+func TestSelectedActivityIdle(t *testing.T) {
+	app := newTestApp()
+	app.snapshot.IdleInTx = []core.Activity{{PID: 99, Query: "SELECT 2"}}
+	app.section = SectionIdle
+	got := app.selectedActivity()
+	if got == nil || got.PID != 99 {
+		t.Errorf("selectedActivity = %v, want PID 99", got)
+	}
+}
+
+func TestSelectedActivityLocks(t *testing.T) {
+	app := newTestApp()
+	app.snapshot.Locks = []core.Lock{{BlockedPID: 1, BlockingPID: 2}}
+	app.section = SectionLocks
+	if app.selectedActivity() != nil {
+		t.Error("selectedActivity should return nil for Locks section")
+	}
+}
+
+func TestSelectedActivityEmpty(t *testing.T) {
+	app := newTestApp()
+	app.section = SectionActivity
+	if app.selectedActivity() != nil {
+		t.Error("selectedActivity should return nil when slice is empty")
+	}
+}
+
+// --- Enter key / detail overlay ---
+
+func TestHandleKeyEnterOpensDetail(t *testing.T) {
+	app := newTestApp()
+	app.snapshot.Activities = []core.Activity{{PID: 1001, Query: "SELECT count(*) FROM orders"}}
+	app.section = SectionActivity
+	model, _ := app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	a := model.(*App)
+	if !a.showDetail {
+		t.Error("expected showDetail=true after Enter on Activity row")
+	}
+	if a.detailItem == nil || a.detailItem.PID != 1001 {
+		t.Errorf("detailItem PID = %v, want 1001", a.detailItem)
+	}
+}
+
+func TestHandleKeyEnterIdleOpensDetail(t *testing.T) {
+	app := newTestApp()
+	app.snapshot.IdleInTx = []core.Activity{{PID: 2002, Query: "UPDATE jobs SET status='done'"}}
+	app.section = SectionIdle
+	model, _ := app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	a := model.(*App)
+	if !a.showDetail {
+		t.Error("expected showDetail=true after Enter on Idle row")
+	}
+	if a.detailItem == nil || a.detailItem.PID != 2002 {
+		t.Errorf("detailItem PID = %v, want 2002", a.detailItem)
+	}
+}
+
+func TestHandleKeyEnterLocksNoOp(t *testing.T) {
+	app := newTestApp()
+	app.snapshot.Locks = []core.Lock{{BlockedPID: 1, BlockingPID: 2}}
+	app.section = SectionLocks
+	model, _ := app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	a := model.(*App)
+	if a.showDetail {
+		t.Error("expected showDetail=false after Enter on Locks row")
+	}
+}
+
+func TestHandleKeyEnterEmptyNoOp(t *testing.T) {
+	app := newTestApp()
+	app.section = SectionActivity
+	model, _ := app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	a := model.(*App)
+	if a.showDetail {
+		t.Error("expected showDetail=false after Enter on empty section")
+	}
+}
+
+func TestDetailCloseOnAnyKey(t *testing.T) {
+	app := newTestApp()
+	act := core.Activity{PID: 1001, Query: "SELECT 1"}
+	app.showDetail = true
+	app.detailItem = &act
+	model, _ := app.handleKey(key("x"))
+	a := model.(*App)
+	if a.showDetail {
+		t.Error("expected showDetail=false after any key when detail is open")
+	}
+	if a.detailItem != nil {
+		t.Error("expected detailItem=nil after closing detail")
+	}
+}
+
+func TestViewDetail(t *testing.T) {
+	app := newTestApp()
+	act := core.Activity{PID: 1001, User: "alice", Query: "SELECT count(*) FROM orders", State: "active"}
+	app.showDetail = true
+	app.detailItem = &act
+	v := app.View()
+	if !strings.Contains(v, "1001") {
+		t.Errorf("expected PID 1001 in detail view, got: %q", v)
+	}
+	if !strings.Contains(v, "SELECT count(*) FROM orders") {
+		t.Errorf("expected full SQL in detail view, got: %q", v)
+	}
+	if !strings.Contains(v, "press any key to close") {
+		t.Errorf("expected dismiss hint in detail view, got: %q", v)
+	}
+}
+
 // --- New ---
 
 type mockQuerier struct{}

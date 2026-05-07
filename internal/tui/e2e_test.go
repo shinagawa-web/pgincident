@@ -141,6 +141,97 @@ func TestE2EHelpViaKey(t *testing.T) {
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
 }
 
+// TestGoldenDetailOverlay verifies the detail overlay layout against a stored golden file.
+// Run with -update to regenerate: go test ./internal/tui/ -run TestGoldenDetailOverlay -update
+func TestGoldenDetailOverlay(t *testing.T) {
+	act := core.Activity{
+		PID:      1001,
+		User:     "alice",
+		Duration: 12 * time.Second,
+		State:    "active",
+		Query:    "SELECT count(*) FROM orders WHERE created_at > NOW() - INTERVAL '1 day' AND status = 'pending'",
+	}
+	app := &App{
+		pollCh:     make(chan core.PollResult),
+		cancel:     func() {},
+		poller:     core.NewPoller(nil, time.Second),
+		width:      120,
+		height:     40,
+		snapshot:   e2eSnapshot(),
+		showDetail: true,
+		detailItem: &act,
+	}
+	golden.RequireEqual(t, []byte(ansi.Strip(app.View())))
+}
+
+// TestE2EDetailOverlayOpenClose verifies that pressing Enter on an Activity row opens the
+// detail overlay showing the full SQL, and pressing any key closes it.
+func TestE2EDetailOverlayOpenClose(t *testing.T) {
+	snap := e2eSnapshot()
+	app := newE2EApp(t, snap)
+	tm := teatest.NewTestModel(t, app, teatest.WithInitialTermSize(120, 40))
+	t.Cleanup(func() { tm.Quit() })
+
+	// Wait for initial render with the activity row visible.
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		return bytes.Contains(stripped(bts), []byte("SELECT count(*) FROM orders"))
+	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
+
+	// Press Enter to open the detail overlay.
+	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+
+	// The detail overlay must show the full SQL and the PID.
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		s := stripped(bts)
+		return bytes.Contains(s, []byte("Query Detail")) &&
+			bytes.Contains(s, []byte("1001")) &&
+			bytes.Contains(s, []byte("press any key to close"))
+	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
+
+	// Press any key to dismiss the overlay.
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+
+	// The main dashboard must be visible again (detail overlay gone).
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		s := stripped(bts)
+		return bytes.Contains(s, []byte("Long-running queries")) &&
+			!bytes.Contains(s, []byte("Query Detail"))
+	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
+}
+
+// TestE2EDetailOverlayLocksNoOp verifies that pressing Enter on the Locks section
+// does not open the detail overlay. Inspects the final model state after quitting.
+func TestE2EDetailOverlayLocksNoOp(t *testing.T) {
+	snap := e2eSnapshot()
+	snap.Locks = []core.Lock{{BlockedPID: 100, BlockingPID: 200, Relation: "public.orders"}}
+	app := newE2EApp(t, snap)
+	tm := teatest.NewTestModel(t, app, teatest.WithInitialTermSize(120, 40))
+
+	// Wait for initial render then navigate to Locks section.
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		return bytes.Contains(stripped(bts), []byte("▶ Long-running queries"))
+	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyTab})
+
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		return bytes.Contains(stripped(bts), []byte("▶ Locks (waiting)"))
+	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
+
+	// Press Enter on Locks row (no-op), then quit to capture the final model.
+	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+
+	fm := tm.FinalModel(t, teatest.WithFinalTimeout(3*time.Second))
+	fa, ok := fm.(*App)
+	if !ok {
+		t.Fatal("expected *App as final model")
+	}
+	if fa.showDetail {
+		t.Error("expected showDetail=false after Enter on Locks row")
+	}
+}
+
 // TestE2ETabNavigation verifies that Tab moves the active-section marker to Locks.
 // Asserts on "▶ Locks (waiting)" which only appears when that section is focused.
 func TestE2ETabNavigation(t *testing.T) {
