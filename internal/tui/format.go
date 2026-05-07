@@ -7,10 +7,10 @@ import (
 )
 
 func formatDuration(d time.Duration) string {
-	s := int(d.Seconds())
-	h := s / 3600
-	m := (s % 3600) / 60
-	sec := s % 60
+	total := int64(d / time.Second)
+	h := total / 3600
+	m := (total % 3600) / 60
+	sec := total % 60
 	return fmt.Sprintf("%02d:%02d:%02d", h, m, sec)
 }
 
