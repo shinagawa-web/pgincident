@@ -480,6 +480,7 @@ func TestDetailCloseOnAnyKey(t *testing.T) {
 	act := core.Activity{PID: 1001, Query: "SELECT 1"}
 	app.showDetail = true
 	app.detailItem = &act
+	app.detailScroll = 2
 	model, _ := app.handleKey(key("x"))
 	a := model.(*App)
 	if a.showDetail {
@@ -487,6 +488,9 @@ func TestDetailCloseOnAnyKey(t *testing.T) {
 	}
 	if a.detailItem != nil {
 		t.Error("expected detailItem=nil after closing detail")
+	}
+	if a.detailScroll != 0 {
+		t.Errorf("expected detailScroll=0 after closing detail, got %d", a.detailScroll)
 	}
 }
 
@@ -644,6 +648,116 @@ func TestNewDefaultsToOverview(t *testing.T) {
 	app.cancel()
 }
 
+// --- detail scroll ---
+
+// overflowQuery is long enough that at width=100, height=24 (sqlRows=20) the overlay overflows.
+const overflowQuery = "WITH paused AS (SELECT pg_sleep(60)) SELECT a.pid, a.usename, a.application_name, a.client_addr, a.client_hostname, a.client_port, a.backend_start, a.xact_start, a.query_start, a.state_change, a.wait_event_type, a.wait_event, a.state, a.backend_xid, a.backend_xmin, a.query, a.backend_type, a.leader_pid, l.locktype, l.database, l.relation::regclass AS locked_table, l.page, l.tuple, l.virtualxid, l.transactionid, l.classid, l.objid, l.objsubid, l.virtualtransaction, l.pid AS lock_pid, l.mode, l.granted, l.fastpath, s.seq_scan, s.seq_tup_read, s.idx_scan, s.idx_tup_fetch, s.n_tup_ins, s.n_tup_upd, s.n_tup_del, s.n_tup_hot_upd, s.n_live_tup, s.n_dead_tup, s.n_mod_since_analyze, s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze, ui.indexrelname, ui.idx_scan AS idx_idx_scan, ui.idx_tup_read, ui.idx_tup_fetch AS idx_tup_fetch2, bg.checkpoints_timed, bg.checkpoints_req, bg.checkpoint_write_time, bg.checkpoint_sync_time, bg.buffers_checkpoint, bg.buffers_clean, bg.maxwritten_clean, bg.buffers_backend, bg.buffers_backend_fsync, bg.buffers_alloc, bg.stats_reset AS bg_stats_reset, r.usesysid AS repl_usesysid, r.usename AS repl_usename, r.application_name AS repl_app_name, r.client_addr AS repl_client_addr, r.state AS repl_state, r.sent_lsn, r.write_lsn, r.flush_lsn, r.replay_lsn, r.write_lag, r.flush_lag, r.replay_lag, r.sync_priority, r.sync_state, ssl.ssl, ssl.version AS ssl_version, ssl.cipher AS ssl_cipher, ssl.bits AS ssl_bits, now() - a.query_start AS query_duration, now() - a.xact_start AS xact_duration, now() - a.state_change AS time_in_state, now() - a.backend_start AS connection_age FROM paused, pg_stat_activity a JOIN pg_locks l ON l.pid = a.pid AND l.granted = false JOIN pg_stat_user_tables s ON s.relid = l.relation JOIN pg_stat_bgwriter bg ON TRUE LEFT JOIN pg_stat_replication r ON r.active_pid = a.pid LEFT JOIN pg_stat_ssl ssl ON ssl.pid = a.pid LEFT JOIN pg_stat_user_indexes ui ON ui.relid = s.relid LEFT JOIN pg_stat_wal_receiver wr ON TRUE LEFT JOIN pg_stat_archiver arch ON TRUE WHERE a.state != 'idle' AND a.pid != pg_backend_pid() ORDER BY query_duration DESC LIMIT 50"
+
+func detailApp() *App {
+	app := newTestApp() // width=100
+	app.height = 24    // sqlRows = 20; overflowQuery overflows at this height
+	act := core.Activity{PID: 5000, Query: overflowQuery}
+	app.showDetail = true
+	app.detailItem = &act
+	return app
+}
+
+func TestDetailScrollDown(t *testing.T) {
+	app := detailApp()
+	model, _ := app.handleKey(key("j"))
+	a := model.(*App)
+	if a.detailScroll != 1 {
+		t.Errorf("detailScroll = %d, want 1 after j", a.detailScroll)
+	}
+}
+
+func TestDetailScrollDownViaArrow(t *testing.T) {
+	app := detailApp()
+	model, _ := app.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	a := model.(*App)
+	if a.detailScroll != 1 {
+		t.Errorf("detailScroll = %d, want 1 after Down", a.detailScroll)
+	}
+}
+
+func TestDetailScrollBoundUpper(t *testing.T) {
+	app := detailApp()
+	lines := strings.Split(formatSQL(overflowQuery, app.width), "\n")
+	sqlRows := app.height - 4
+	maxScroll := len(lines) - sqlRows
+	app.detailScroll = maxScroll - 1
+	model, _ := app.handleKey(key("j"))
+	model, _ = model.(*App).handleKey(key("j"))
+	a := model.(*App)
+	if a.detailScroll != maxScroll {
+		t.Errorf("detailScroll = %d, want %d (clamped at max)", a.detailScroll, maxScroll)
+	}
+}
+
+func TestDetailScrollUp(t *testing.T) {
+	app := detailApp()
+	app.detailScroll = 5
+	model, _ := app.handleKey(key("k"))
+	a := model.(*App)
+	if a.detailScroll != 4 {
+		t.Errorf("detailScroll = %d, want 4 after k", a.detailScroll)
+	}
+}
+
+func TestDetailScrollUpViaArrow(t *testing.T) {
+	app := detailApp()
+	app.detailScroll = 5
+	model, _ := app.handleKey(tea.KeyMsg{Type: tea.KeyUp})
+	a := model.(*App)
+	if a.detailScroll != 4 {
+		t.Errorf("detailScroll = %d, want 4 after Up", a.detailScroll)
+	}
+}
+
+func TestDetailScrollBoundLower(t *testing.T) {
+	app := detailApp()
+	// Already at 0; pressing up should stay at 0.
+	model, _ := app.handleKey(key("k"))
+	a := model.(*App)
+	if a.detailScroll != 0 {
+		t.Errorf("detailScroll = %d, want 0 (clamped at min)", a.detailScroll)
+	}
+}
+
+func TestDetailScrollResetOnOpen(t *testing.T) {
+	app := newTestApp()
+	app.height = 24
+	app.snapshot.Activities = []core.Activity{{PID: 5001, Query: overflowQuery}}
+	app.section = SectionActivity
+	app.detailScroll = 99 // stale scroll from a previous session
+	model, _ := app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	a := model.(*App)
+	if a.detailScroll != 0 {
+		t.Errorf("detailScroll = %d, want 0 after opening overlay", a.detailScroll)
+	}
+}
+
+func TestViewDetailScrollFooter(t *testing.T) {
+	app := detailApp()
+	v := app.View()
+	if !strings.Contains(v, "[↑/↓/k/j] scroll") {
+		t.Errorf("expected scroll footer when SQL overflows, got: %q", v)
+	}
+}
+
+func TestViewDetailNoScrollFooter(t *testing.T) {
+	app := newTestApp()
+	act := core.Activity{PID: 6000, Query: "SELECT 1"}
+	app.showDetail = true
+	app.detailItem = &act
+	v := app.View()
+	if !strings.Contains(v, "[any key] close") {
+		t.Errorf("expected simple footer for short SQL, got: %q", v)
+	}
+	if strings.Contains(v, "[↑/↓/k/j] scroll") {
+		t.Errorf("unexpected scroll footer for short SQL, got: %q", v)
+	}
+}
 // --- New ---
 
 type mockQuerier struct{}
