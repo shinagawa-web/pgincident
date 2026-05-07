@@ -581,23 +581,24 @@ func TestViewOverview(t *testing.T) {
 	}
 }
 
-func TestViewOverviewNoReplicationRowWhenZero(t *testing.T) {
+func TestViewOverviewNoReplicationRowWhenNoStandbys(t *testing.T) {
 	app := newTestApp()
 	app.screen = ScreenOverview
-	app.snapshot.DBStats.ReplicationLagSecs = 0
+	app.snapshot.DBStats.HasStandbys = false
 	v := app.View()
 	if strings.Contains(v, "Replication lag") {
-		t.Error("expected Replication lag row to be hidden when lag=0")
+		t.Error("expected Replication lag row to be hidden when no standbys")
 	}
 }
 
-func TestViewOverviewReplicationRowVisible(t *testing.T) {
+func TestViewOverviewReplicationRowVisibleWhenStandbysExist(t *testing.T) {
 	app := newTestApp()
 	app.screen = ScreenOverview
-	app.snapshot.DBStats.ReplicationLagSecs = 12.4
+	app.snapshot.DBStats.HasStandbys = true
+	app.snapshot.DBStats.ReplicationLagSecs = 0 // caught up but standbys exist
 	v := app.View()
 	if !strings.Contains(v, "Replication lag") {
-		t.Error("expected Replication lag row to be visible when lag>0")
+		t.Error("expected Replication lag row to be visible when standbys exist even if lag=0")
 	}
 }
 
@@ -608,6 +609,29 @@ func TestViewOverviewTPSNonZero(t *testing.T) {
 	v := app.View()
 	if !strings.Contains(v, "1234") {
 		t.Errorf("expected TPS value in overview, got: %q", v)
+	}
+}
+
+func TestViewOverviewStatusBadges(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenOverview
+	// connections > 90% → CRIT; cache hit < 95% → CRIT; autovacuum > 5 → CRIT
+	app.snapshot.DBStats.ConnectionsActive = 95
+	app.snapshot.DBStats.ConnectionsMax = 100
+	app.snapshot.DBStats.CacheHitRatio = 0.94
+	app.snapshot.DBStats.AutovacuumWorkers = 6
+	v := app.View()
+	if !strings.Contains(v, "CRIT") {
+		t.Errorf("expected CRIT badge in overview for critical metrics, got: %q", v)
+	}
+	// checkpoint req > 0 → WARN
+	app.snapshot.DBStats.ConnectionsActive = 10
+	app.snapshot.DBStats.CacheHitRatio = 0.999
+	app.snapshot.DBStats.AutovacuumWorkers = 0
+	app.snapshot.DBStats.CheckpointReq = 5
+	v = app.View()
+	if !strings.Contains(v, "WARN") {
+		t.Errorf("expected WARN badge in overview for warning metrics, got: %q", v)
 	}
 }
 

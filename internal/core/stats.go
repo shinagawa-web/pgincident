@@ -12,6 +12,7 @@ SELECT
     COALESCE(sum(xact_commit + xact_rollback), 0)::bigint                 AS xact_total,
     COALESCE(sum(blks_hit)::float / NULLIF(sum(blks_hit + blks_read), 0), 0) AS cache_hit_ratio,
     (SELECT checkpoints_req FROM pg_stat_bgwriter)                         AS checkpoint_req,
+    (SELECT EXISTS (SELECT 1 FROM pg_stat_replication))                    AS has_standbys,
     COALESCE(
         (SELECT MAX(EXTRACT(EPOCH FROM (
             COALESCE(write_lag, '0') +
@@ -34,6 +35,7 @@ func (c *Client) Stats(ctx context.Context) (DBStats, error) {
 		&s.XactTotal,
 		&s.CacheHitRatio,
 		&s.CheckpointReq,
+		&s.HasStandbys,
 		&s.ReplicationLagSecs,
 		&s.AutovacuumWorkers,
 	)

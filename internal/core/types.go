@@ -33,7 +33,8 @@ type DBStats struct {
 	CacheHitRatio      float64
 	XactTotal          int64   // raw cumulative value; used for TPS delta, not displayed
 	CheckpointReq      int64   // checkpoints triggered by WAL pressure since last reset
-	ReplicationLagSecs float64 // max lag across all standbys in seconds; 0 if no standbys
+	HasStandbys        bool    // true when pg_stat_replication has at least one row
+	ReplicationLagSecs float64 // max lag across all standbys in seconds; 0 if fully caught up or no standbys
 	AutovacuumWorkers  int     // number of active autovacuum worker processes
 }
 

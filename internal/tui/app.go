@@ -237,7 +237,7 @@ func (a *App) renderHelp() string {
 		"  Shift-Tab     previous section\n" +
 		"  ↑ / k         cursor up\n" +
 		"  ↓ / j         cursor down\n" +
-		"  Enter         query detail overlay\n" +
+		"  Enter         query detail overlay (dashboard only)\n" +
 		"  + / -         increase / decrease interval\n" +
 		"  ?             this help\n\n" +
 		dimStyle.Render("press any key to close")

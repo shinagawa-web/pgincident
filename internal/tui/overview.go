@@ -34,7 +34,7 @@ func renderOverviewMetrics(s core.DBStats) string {
 		overviewRow("Cache hit", fmt.Sprintf("%.1f%%", s.CacheHitRatio*100), s.CacheHitStatus()),
 		overviewRow("Checkpoints", fmt.Sprintf("req: %d", s.CheckpointReq), s.CheckpointStatus()),
 	}
-	if s.ReplicationLagSecs > 0 {
+	if s.HasStandbys {
 		rows = append(rows, overviewRow("Replication lag", fmt.Sprintf("%.1fs", s.ReplicationLagSecs), s.ReplicationLagStatus()))
 	}
 	rows = append(rows, overviewRow("Autovacuum", fmt.Sprintf("%d workers", s.AutovacuumWorkers), s.AutovacuumStatus()))
@@ -53,7 +53,7 @@ func statusBadge(s core.HealthStatus) (string, lipgloss.Style) {
 	case core.StatusWarning:
 		return "WARN", warnStyle
 	default:
-		return "OK", dimStyle
+		return "OK", lipgloss.NewStyle()
 	}
 }
 
