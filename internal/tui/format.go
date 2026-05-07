@@ -42,6 +42,29 @@ func padRight(s string, n int) string {
 	}
 }
 
+// wrapText wraps s to at most width runes per line, breaking on whitespace.
+func wrapText(s string, width int) string {
+	if width <= 0 {
+		return s
+	}
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return ""
+	}
+	var lines []string
+	line := words[0]
+	for _, w := range words[1:] {
+		if len([]rune(line))+1+len([]rune(w)) <= width {
+			line += " " + w
+		} else {
+			lines = append(lines, line)
+			line = w
+		}
+	}
+	lines = append(lines, line)
+	return strings.Join(lines, "\n")
+}
+
 func connPct(active, max int) string {
 	if max == 0 {
 		return "—"
