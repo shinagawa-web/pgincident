@@ -3,7 +3,7 @@ Connections: 3/100 (3%)   TPS: —   Cache hit: 99.0%
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ▶ Long-running queries (> 5s)                                                                                 [1 active]
   PID    USER          DURATION     STATE       QUERY
-▸ 1001   alice         00:00:12.00  active      SELECT count(*) FROM orders
+▸ 1001   alice         00:00:12     active      SELECT count(*) FROM orders
 
 
 
