@@ -66,6 +66,33 @@ func wrapText(s string, width int) string {
 	return strings.Join(lines, "\n")
 }
 
+// clauseRe matches major SQL clause keywords preceded by a space.
+// Longer alternatives are listed first to avoid partial matches (e.g. LEFT JOIN before JOIN).
+var clauseRe = regexp.MustCompile(
+	`(?i) (UNION ALL|LEFT OUTER JOIN|RIGHT OUTER JOIN|FULL OUTER JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|CROSS JOIN|GROUP BY|ORDER BY|FROM|WHERE|JOIN|HAVING|LIMIT|OFFSET|UNION|EXCEPT|INTERSECT|RETURNING)\b`,
+)
+
+// formatSQL breaks a single-line SQL string at clause boundaries and word-wraps
+// each clause to width. Continuation lines are indented by 2 spaces.
+func formatSQL(s string, width int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	s = clauseRe.ReplaceAllString(s, "\n$1 ")
+
+	var lines []string
+	for _, clause := range strings.Split(strings.TrimSpace(s), "\n") {
+		clause = strings.TrimSpace(clause)
+		if clause == "" {
+			continue
+		}
+		parts := strings.Split(wrapText(clause, width), "\n")
+		lines = append(lines, parts[0])
+		for _, cont := range parts[1:] {
+			lines = append(lines, "  "+cont)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 var sqlKeywordRe = regexp.MustCompile(
 	`(?i)\b(SELECT|DISTINCT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|FULL|ON|AND|OR|NOT|IN|EXISTS|HAVING|LIMIT|OFFSET|UNION|ALL|EXCEPT|INTERSECT|INSERT|INTO|UPDATE|DELETE|SET|VALUES|AS|WITH|CASE|WHEN|THEN|ELSE|END|NULL|IS|LIKE|ILIKE|BETWEEN|ASC|DESC|COUNT|SUM|AVG|MIN|MAX|COALESCE|NULLIF|CAST|INTERVAL|GROUP|ORDER|BY|RETURNING|USING|LATERAL|RECURSIVE|TRUE|FALSE)\b`,
 )

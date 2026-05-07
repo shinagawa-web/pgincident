@@ -110,6 +110,60 @@ func TestHighlightSQL(t *testing.T) {
 	}
 }
 
+func TestFormatSQL(t *testing.T) {
+	cases := []struct {
+		name  string
+		s     string
+		width int
+		want  string
+	}{
+		{
+			name:  "clause breaks",
+			s:     "SELECT id FROM users WHERE status = 'active' ORDER BY id LIMIT 10",
+			width: 80,
+			want:  "SELECT id\nFROM users\nWHERE status = 'active'\nORDER BY id\nLIMIT 10",
+		},
+		{
+			name:  "join variants",
+			s:     "SELECT a.id FROM a LEFT JOIN b ON b.a_id = a.id INNER JOIN c ON c.id = b.c_id",
+			width: 80,
+			want:  "SELECT a.id\nFROM a\nLEFT JOIN b ON b.a_id = a.id\nINNER JOIN c ON c.id = b.c_id",
+		},
+		{
+			name:  "long clause wraps with indent",
+			s:     "SELECT very_long_column_one, very_long_column_two, very_long_column_three FROM t",
+			width: 40,
+			want:  "SELECT very_long_column_one,\n  very_long_column_two,\n  very_long_column_three\nFROM t",
+		},
+		{
+			name:  "normalises whitespace",
+			s:     "SELECT  id   FROM   users",
+			width: 80,
+			want:  "SELECT id\nFROM users",
+		},
+		{
+			name:  "no clause keywords",
+			s:     "pg_sleep(10)",
+			width: 80,
+			want:  "pg_sleep(10)",
+		},
+		{
+			name:  "empty string",
+			s:     "",
+			width: 80,
+			want:  "",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := formatSQL(c.s, c.width)
+			if got != c.want {
+				t.Errorf("formatSQL(%q, %d)\ngot:  %q\nwant: %q", c.s, c.width, got, c.want)
+			}
+		})
+	}
+}
+
 func TestConnPct(t *testing.T) {
 	cases := []struct {
 		active, max int

@@ -231,7 +231,7 @@ func (a *App) renderDetail() string {
 	// title + sep + sep + footer = 4 fixed rows; SQL fills the rest.
 	sqlRows := a.height - 4
 
-	sqlLines := strings.Split(wrapText(act.Query, a.width), "\n")
+	sqlLines := strings.Split(formatSQL(act.Query, a.width), "\n")
 	for i, line := range sqlLines {
 		sqlLines[i] = highlightSQL(line)
 	}
