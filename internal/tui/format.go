@@ -109,9 +109,19 @@ var sqlKeywordRe = regexp.MustCompile(
 )
 
 func highlightSQL(line string) string {
-	return sqlKeywordRe.ReplaceAllStringFunc(line, func(kw string) string {
-		return sqlKeywordStyle.Render(strings.ToUpper(kw))
-	})
+	// Split on single quotes so keywords inside string literals are not uppercased.
+	// Odd-indexed segments are inside quotes and are preserved verbatim.
+	parts := strings.Split(line, "'")
+	for i, part := range parts {
+		if i%2 == 0 {
+			parts[i] = sqlKeywordRe.ReplaceAllStringFunc(part, func(kw string) string {
+				return sqlKeywordStyle.Render(strings.ToUpper(kw))
+			})
+		} else {
+			parts[i] = "'" + part + "'"
+		}
+	}
+	return strings.Join(parts, "")
 }
 
 func connPct(active, max int) string {

@@ -118,6 +118,7 @@ func TestHighlightSQL(t *testing.T) {
 		{"SELECT 1", "SELECT 1"},
 		{"select count(*) from users", "SELECT COUNT(*) FROM users"},
 		{"WHERE id = 1 AND status = 'active'", "WHERE id = 1 AND status = 'active'"},
+		{"WHERE note = 'select'", "WHERE note = 'select'"},
 		{"no keywords here", "no keywords here"},
 		{"", ""},
 	}
