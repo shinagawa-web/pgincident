@@ -601,6 +601,16 @@ func TestViewOverviewReplicationRowVisible(t *testing.T) {
 	}
 }
 
+func TestViewOverviewTPSNonZero(t *testing.T) {
+	app := newTestApp()
+	app.screen = ScreenOverview
+	app.snapshot.DBStats.TPS = 1234
+	v := app.View()
+	if !strings.Contains(v, "1234") {
+		t.Errorf("expected TPS value in overview, got: %q", v)
+	}
+}
+
 func TestNewDefaultsToOverview(t *testing.T) {
 	poller := core.NewPoller(&mockQuerier{}, time.Second)
 	app := New(poller)
