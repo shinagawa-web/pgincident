@@ -175,9 +175,10 @@ func TestIntegrationLongRunningQueryNotTruncated(t *testing.T) {
 	c := integrationClient(t)
 	ctx := context.Background()
 
-	// A query that is deliberately longer than 200 characters.
+	// A query that is deliberately longer than 200 characters (actual length ~214 chars).
 	longQuery := "SELECT pg_sleep(30), 1 AS col001, 1 AS col002, 1 AS col003, 1 AS col004, " +
-		"1 AS col005, 1 AS col006, 1 AS col007, 1 AS col008, 1 AS col009, 1 AS col010"
+		"1 AS col005, 1 AS col006, 1 AS col007, 1 AS col008, 1 AS col009, 1 AS col010, " +
+		"1 AS col011, 1 AS col012, 1 AS col013, 1 AS col014, 1 AS col015"
 
 	sleepConn, err := pgx.Connect(ctx, os.Getenv("DATABASE_URL"))
 	if err != nil {
