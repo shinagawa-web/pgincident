@@ -1,4 +1,4 @@
-pgincident v0.1.0                                                    connected: localhost:5432 (PG 16.1)  interval: 1.0s
+pgincident vdev                                                      connected: localhost:5432 (PG 16.1)  interval: 1.0s
 Connections: 3/100 (3%)   TPS: —   Cache hit: 99.0%
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ▶ Long-running queries (> 5s)                                                                                 [1 active]
