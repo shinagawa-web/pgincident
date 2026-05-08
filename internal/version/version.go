@@ -1,4 +1,5 @@
 package version
 
-// Version is overridden at build time via -ldflags "-X github.com/shinagawa-web/pgincident/internal/version.Version=..."
+// Version is overridden at build time via -ldflags. "dev" is the fallback for
+// go test, go run, and any build that omits ldflags.
 var Version = "dev"
