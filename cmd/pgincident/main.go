@@ -14,6 +14,16 @@ import (
 
 const defaultDSN = "postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres"
 
+const helpText = `Usage: pgincident [options]
+
+Options:
+  -v, --version   Print version and exit
+  -h, --help      Show this help
+
+Environment:
+  DATABASE_URL    PostgreSQL DSN (default: postgres://<user>:<password>@<host>:<port>/<db>)
+`
+
 func main() {
 	for _, arg := range os.Args[1:] {
 		switch arg {
@@ -21,8 +31,11 @@ func main() {
 			fmt.Printf("pgincident v%s\n", version.Version)
 			os.Exit(0)
 		case "-h", "--help":
-			fmt.Printf("Usage: pgincident [options]\n\nOptions:\n  -v, --version   Print version and exit\n  -h, --help      Show this help\n\nEnvironment:\n  DATABASE_URL    PostgreSQL DSN (default: %s)\n", defaultDSN)
+			fmt.Print(helpText)
 			os.Exit(0)
+		default:
+			fmt.Fprintf(os.Stderr, "unknown flag: %s\n\n%s", arg, helpText)
+			os.Exit(1)
 		}
 	}
 
