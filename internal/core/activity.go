@@ -13,7 +13,7 @@ SELECT
     COALESCE(state, ''),
     COALESCE(query_start, now()),
     now() - COALESCE(query_start, now()),
-    left(COALESCE(query, ''), 200),
+    COALESCE(query, ''),
     COALESCE(application_name, ''),
     COALESCE(client_addr::text, '(local)')
 FROM pg_stat_activity
@@ -30,7 +30,7 @@ SELECT
     state,
     xact_start,
     now() - xact_start,
-    left(COALESCE(query, ''), 200),
+    COALESCE(query, ''),
     COALESCE(application_name, ''),
     COALESCE(client_addr::text, '(local)')
 FROM pg_stat_activity
