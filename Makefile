@@ -1,7 +1,10 @@
 .PHONY: build run test test-integration lint tidy install-hooks dev-up dev-down dev-seed
 
+VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "dev")
+LDFLAGS := -X github.com/shinagawa-web/pgincident/internal/version.Version=$(VERSION)
+
 build:
-	go build ./...
+	go build -ldflags "$(LDFLAGS)" -o pgincident ./cmd/pgincident/
 
 run:
 	go run ./cmd/pgincident
