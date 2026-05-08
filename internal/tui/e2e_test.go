@@ -155,6 +155,30 @@ func TestE2EHelpViaKey(t *testing.T) {
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
 }
 
+// TestGoldenDetailOverlayOverflow verifies the detail overlay with a query that overflows
+// the visible area, confirming the scroll footer appears.
+// Run with -update to regenerate: go test ./internal/tui/ -run TestGoldenDetailOverlayOverflow -update
+func TestGoldenDetailOverlayOverflow(t *testing.T) {
+	act := core.Activity{
+		PID:      9000,
+		User:     "alice",
+		Duration: 30 * time.Second,
+		State:    "active",
+		Query:    overflowQuery,
+	}
+	app := &App{
+		pollCh:     make(chan core.PollResult),
+		cancel:     func() {},
+		poller:     core.NewPoller(nil, time.Second),
+		width:      100,
+		height:     24,
+		snapshot:   e2eSnapshot(),
+		showDetail: true,
+		detailItem: &act,
+	}
+	golden.RequireEqual(t, []byte(ansi.Strip(app.View())))
+}
+
 // TestGoldenDetailOverlay verifies the detail overlay layout against a stored golden file.
 // Run with -update to regenerate: go test ./internal/tui/ -run TestGoldenDetailOverlay -update
 func TestGoldenDetailOverlay(t *testing.T) {
