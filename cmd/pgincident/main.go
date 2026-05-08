@@ -9,12 +9,26 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/shinagawa-web/pgincident/internal/core"
 	"github.com/shinagawa-web/pgincident/internal/tui"
+	"github.com/shinagawa-web/pgincident/internal/version"
 )
 
+const defaultDSN = "postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres"
+
 func main() {
+	for _, arg := range os.Args[1:] {
+		switch arg {
+		case "-v", "--version":
+			fmt.Printf("pgincident v%s\n", version.Version)
+			os.Exit(0)
+		case "-h", "--help":
+			fmt.Printf("Usage: pgincident [options]\n\nOptions:\n  -v, --version   Print version and exit\n  -h, --help      Show this help\n\nEnvironment:\n  DATABASE_URL    PostgreSQL DSN (default: %s)\n", defaultDSN)
+			os.Exit(0)
+		}
+	}
+
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres"
+		dsn = defaultDSN
 	}
 
 	ctx := context.Background()
