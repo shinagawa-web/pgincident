@@ -1,3 +1,4 @@
 package version
 
-const Version = "0.1.0"
+// Version is overridden at build time via -ldflags "-X github.com/shinagawa-web/pgincident/internal/version.Version=..."
+var Version = "dev"
