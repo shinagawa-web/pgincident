@@ -40,11 +40,14 @@ type App struct {
 	height       int
 	lastErr      error
 	statusMsg    string
-	showHelp     bool
-	showDetail   bool
-	detailItem   *core.Activity
-	detailScroll int
-	quitting     bool
+	showHelp         bool
+	showDetail       bool
+	detailItem       *core.Activity
+	detailScroll     int
+	detailLines      []string       // cached formatted lines; valid when detailLinesItem == detailItem && detailLinesWidth == width
+	detailLinesItem  *core.Activity
+	detailLinesWidth int
+	quitting         bool
 }
 
 func New(poller *core.Poller) *App {
@@ -89,8 +92,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if a.showDetail {
+		if a.detailItem == nil {
+			a.showDetail = false
+			a.detailScroll = 0
+			return a, nil
+		}
 		sqlRows := a.height - 4
-		total := len(strings.Split(formatSQL(a.detailItem.Query, a.width), "\n"))
+		total := len(a.getDetailLines())
 		canScroll := total > sqlRows
 		if canScroll {
 			switch msg.String() {
@@ -149,6 +157,7 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				a.showDetail = true
 				a.detailItem = act
 				a.detailScroll = 0
+				a.detailLines = nil
 			}
 		}
 	}
@@ -250,12 +259,24 @@ func (a *App) View() string {
 	return strings.Join(parts, "\n")
 }
 
+func (a *App) getDetailLines() []string {
+	if a.detailItem == nil {
+		return nil
+	}
+	if a.detailLines == nil || a.detailLinesItem != a.detailItem || a.detailLinesWidth != a.width {
+		a.detailLines = strings.Split(formatSQL(a.detailItem.Query, a.width), "\n")
+		a.detailLinesItem = a.detailItem
+		a.detailLinesWidth = a.width
+	}
+	return a.detailLines
+}
+
 func (a *App) clampScroll(offset int) int {
 	if a.detailItem == nil {
 		return 0
 	}
 	sqlRows := a.height - 4
-	total := len(strings.Split(formatSQL(a.detailItem.Query, a.width), "\n"))
+	total := len(a.getDetailLines())
 	maxScroll := total - sqlRows
 	if maxScroll <= 0 {
 		return 0
@@ -293,8 +314,9 @@ func (a *App) renderDetail() string {
 	// title + sep + sep + footer = 4 fixed rows; SQL fills the rest.
 	sqlRows := a.height - 4
 
-	sqlLines := strings.Split(formatSQL(act.Query, a.width), "\n")
-	for i, line := range sqlLines {
+	rawLines := a.getDetailLines()
+	sqlLines := make([]string, len(rawLines))
+	for i, line := range rawLines {
 		sqlLines[i] = highlightSQL(line)
 	}
 	total := len(sqlLines)

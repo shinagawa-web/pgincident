@@ -724,6 +724,24 @@ func TestDetailScrollBoundLower(t *testing.T) {
 	}
 }
 
+func TestHandleKeyDetailNilItem(t *testing.T) {
+	app := newTestApp()
+	app.showDetail = true
+	app.detailItem = nil
+	model, _ := app.handleKey(key("j"))
+	a := model.(*App)
+	if a.showDetail {
+		t.Error("showDetail should be false after keypress with nil detailItem")
+	}
+}
+
+func TestGetDetailLinesNilItem(t *testing.T) {
+	app := newTestApp()
+	if lines := app.getDetailLines(); lines != nil {
+		t.Errorf("getDetailLines() with nil detailItem = %v, want nil", lines)
+	}
+}
+
 func TestDetailScrollResetOnOpen(t *testing.T) {
 	app := newTestApp()
 	app.height = 24
