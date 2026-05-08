@@ -99,18 +99,17 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		sqlRows := a.height - 4
 		total := len(a.getDetailLines())
-		canScroll := total > sqlRows
-		if canScroll {
-			switch msg.String() {
-			case "up", "k":
-				if a.detailScroll > 0 {
-					a.detailScroll--
-				}
-				return a, nil
-			case "down", "j":
-				a.detailScroll = a.clampScroll(a.detailScroll + 1)
-				return a, nil
+		switch msg.String() {
+		case "up", "k":
+			if a.detailScroll > 0 {
+				a.detailScroll--
 			}
+			return a, nil
+		case "down", "j":
+			if total > sqlRows {
+				a.detailScroll = a.clampScroll(a.detailScroll + 1)
+			}
+			return a, nil
 		}
 		a.showDetail = false
 		a.detailItem = nil

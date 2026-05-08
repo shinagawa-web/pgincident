@@ -328,6 +328,50 @@ func TestE2EDetailScrollWithLongQuery(t *testing.T) {
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
 }
 
+// TestE2EDetailResizeShowsScrollFooter verifies that narrowing the terminal while the
+// detail overlay is open reformats the SQL and shows the scroll footer.
+// The snapshot uses overflowQuery; at width=200 height=30 the query fits (no scroll),
+// but after resize to width=100 height=30 it overflows (scroll footer appears).
+func TestE2EDetailResizeShowsScrollFooter(t *testing.T) {
+	snap := core.Snapshot{
+		PGVersion:  "16.1",
+		ServerAddr: "localhost:5432",
+		DBStats:    core.DBStats{ConnectionsActive: 1, ConnectionsMax: 100, CacheHitRatio: 0.99},
+		Activities: []core.Activity{
+			{PID: 9000, User: "alice", Duration: 30 * time.Second, State: "active", Query: overflowQuery},
+		},
+	}
+	app := newE2EApp(t, snap)
+	// Start wide: at width=200 height=30 the query formats to 23 lines < sqlRows=26 → no overflow.
+	tm := teatest.NewTestModel(t, app, teatest.WithInitialTermSize(200, 30))
+	t.Cleanup(func() { tm.Quit() })
+
+	// Wait for Overview, switch to Dashboard.
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		return bytes.Contains(stripped(bts), []byte("DB Health Overview"))
+	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'o'}})
+
+	// Wait for the activity row, then open detail.
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		return bytes.Contains(stripped(bts), []byte("9000"))
+	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
+	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+
+	// At width=200 the footer must be "[any key] close" (no scroll).
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		return bytes.Contains(stripped(bts), []byte("[any key] close"))
+	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
+
+	// Narrow the terminal: at width=100 the query expands to 31 lines > sqlRows=26 → overflow.
+	tm.Send(tea.WindowSizeMsg{Width: 100, Height: 30})
+
+	// Scroll footer must appear after resize.
+	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
+		return bytes.Contains(stripped(bts), []byte("[↑/↓/k/j] scroll"))
+	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
+}
+
 // TestE2ETabNavigation verifies that Tab moves the active-section marker to Locks.
 // Asserts on "▶ Locks (waiting)" which only appears when that section is focused.
 func TestE2ETabNavigation(t *testing.T) {

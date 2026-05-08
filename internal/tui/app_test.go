@@ -843,6 +843,112 @@ func TestUpdateWindowSizeDetailOpen(t *testing.T) {
 	}
 }
 
+// countSQLLines returns the number of lines between the two separator lines in the detail view.
+func countSQLLines(view string) int {
+	lines := strings.Split(view, "\n")
+	sep := 0
+	count := 0
+	for _, l := range lines {
+		if strings.HasPrefix(l, "────") {
+			sep++
+			continue
+		}
+		if sep == 1 {
+			count++
+		}
+		if sep == 2 {
+			break
+		}
+	}
+	return count
+}
+
+// TestDetailSQLLinesFilledByHeight verifies that the SQL area always contains exactly
+// height-4 lines (padded with blank lines when the query is shorter than the window).
+// Heights below minHeight (24) show a "too small" message and are not tested here.
+func TestDetailSQLLinesFilledByHeight(t *testing.T) {
+	for _, h := range []int{24, 30, 40} {
+		app := newTestApp()
+		app.width = 100
+		app.height = h
+		act := core.Activity{PID: 1, Query: overflowQuery}
+		app.showDetail = true
+		app.detailItem = &act
+		got := countSQLLines(app.View())
+		want := h - 4
+		if got != want {
+			t.Errorf("height=%d: SQL lines = %d, want %d", h, got, want)
+		}
+	}
+}
+
+// TestDetailResizeWidthNarrowShowsScrollFooter verifies that narrowing the terminal
+// while the detail overlay is open triggers overflow and shows the scroll footer.
+// At width=200 height=30 the query fits (23 lines < sqlRows=26).
+// After resize to width=100 the query expands to 31 lines > 26 → overflow.
+func TestDetailResizeWidthNarrowShowsScrollFooter(t *testing.T) {
+	app := newTestApp()
+	app.width = 200
+	app.height = 30
+	act := core.Activity{PID: 1, Query: overflowQuery}
+	app.showDetail = true
+	app.detailItem = &act
+
+	if strings.Contains(app.View(), "scroll") {
+		t.Fatal("expected no scroll footer at width=200 height=30 before resize")
+	}
+
+	model, _ := app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	a := model.(*App)
+	if !strings.Contains(a.View(), "scroll") {
+		t.Error("expected scroll footer after resize to width=100 height=30")
+	}
+}
+
+// TestDetailResizeHeightExpandHidesScrollFooter verifies that expanding the terminal
+// while scrolling is active removes the scroll footer once the query fits.
+// At height=24 the query overflows (31 lines > sqlRows=20).
+// After resize to height=36 the query fits (31 lines ≤ sqlRows=32).
+func TestDetailResizeHeightExpandHidesScrollFooter(t *testing.T) {
+	app := detailApp() // width=100, height=24 → overflow
+	if !strings.Contains(app.View(), "scroll") {
+		t.Fatal("expected scroll footer at height=24 before resize")
+	}
+
+	model, _ := app.Update(tea.WindowSizeMsg{Width: 100, Height: 36})
+	a := model.(*App)
+	v := a.View()
+	if strings.Contains(v, "[↑/↓/k/j] scroll") {
+		t.Error("expected scroll footer to disappear after resize to height=36")
+	}
+	if !strings.Contains(v, "[any key] close") {
+		t.Error("expected [any key] close footer after resize to height=36")
+	}
+}
+
+// TestDetailResizeHeightShrinkShowsScrollFooter verifies that shrinking the terminal
+// causes the scroll footer to appear when the query no longer fits.
+// At width=150 height=30 the query formats to 26 lines = sqlRows=26 → no overflow.
+// After resize to height=24 the query overflows (26 lines > sqlRows=20).
+func TestDetailResizeHeightShrinkShowsScrollFooter(t *testing.T) {
+	app := newTestApp()
+	app.width = 150
+	app.height = 30
+	act := core.Activity{PID: 1, Query: overflowQuery}
+	app.showDetail = true
+	app.detailItem = &act
+
+	if strings.Contains(app.View(), "scroll") {
+		t.Fatal("expected no scroll footer at width=150 height=30 before resize")
+	}
+
+	model, _ := app.Update(tea.WindowSizeMsg{Width: 150, Height: 24})
+	a := model.(*App)
+	if !strings.Contains(a.View(), "scroll") {
+		t.Error("expected scroll footer after resize to height=24")
+	}
+}
+
 func TestRenderDetailStartBeyondTotal(t *testing.T) {
 	app := newTestApp()
 	act := core.Activity{PID: 7000, Query: "SELECT 1"}
