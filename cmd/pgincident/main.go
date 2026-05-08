@@ -21,7 +21,7 @@ Options:
   -h, --help      Show this help
 
 Environment:
-  DATABASE_URL    PostgreSQL DSN (default: postgres://<user>:<password>@<host>:<port>/<db>)
+  DATABASE_URL    PostgreSQL DSN (e.g. postgres://user:password@localhost:5432/mydb)
 `
 
 func main() {
