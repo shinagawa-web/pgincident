@@ -22,7 +22,15 @@ The hook runs automatically on every `git push` and checks:
 - `go build ./...`
 - `go vet ./...`
 - Unit + e2e tests (`go test -race ./internal/...`)
-- Integration tests (skipped automatically when `DATABASE_URL` is unset)
+- Integration tests — **required**; push fails if `DATABASE_URL` is not set
+
+Before pushing, start the dev container and export the DSN:
+
+```bash
+make dev-up
+export DATABASE_URL="postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+git push
+```
 
 Bypass with `git push --no-verify` if needed.
 
