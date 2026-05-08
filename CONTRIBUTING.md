@@ -78,7 +78,7 @@ FROM paused, pg_stat_activity a
 JOIN pg_locks l ON l.pid = a.pid AND l.granted = false
 JOIN pg_stat_user_tables s ON s.relid = l.relation
 JOIN pg_stat_bgwriter bg ON TRUE
-LEFT JOIN pg_stat_replication r ON r.active_pid = a.pid
+LEFT JOIN pg_stat_replication r ON r.pid = a.pid
 LEFT JOIN pg_stat_ssl ssl ON ssl.pid = a.pid
 LEFT JOIN pg_stat_user_indexes ui ON ui.relid = s.relid
 LEFT JOIN pg_stat_wal_receiver wr ON TRUE
