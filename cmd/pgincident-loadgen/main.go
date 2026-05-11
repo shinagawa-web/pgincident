@@ -48,16 +48,16 @@ func main() {
 		cancel()
 	}()
 
-	pool, err := pgxpool.New(ctx, *dsn)
-	if err != nil {
-		log.Fatalf("connect pool: %v", err)
-	}
-	defer pool.Close()
-
 	var wg sync.WaitGroup
 	var enabled []string
 
 	if !*noTPS {
+		pool, err := pgxpool.New(ctx, *dsn)
+		if err != nil {
+			log.Fatalf("connect pool: %v", err)
+		}
+		defer pool.Close()
+
 		enabled = append(enabled, fmt.Sprintf("tps(%d workers)", *tpsWorkers))
 		for i := 0; i < *tpsWorkers; i++ {
 			wg.Add(1)

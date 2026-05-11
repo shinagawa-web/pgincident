@@ -28,6 +28,7 @@ dev-up:
 	docker compose up -d
 	@echo "waiting for postgres..."
 	@until docker compose exec postgres pg_isready -q; do sleep 1; done
+	docker compose exec -T postgres psql -U postgres < dev/loadgen_setup.sql
 	@echo "ready. DSN: postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres"
 
 dev-down:
@@ -42,6 +43,5 @@ dev-seed:
 # Pass LOADGEN_FLAGS to toggle subsystems, e.g.:
 #   make dev-load LOADGEN_FLAGS="--no-locks --no-idle"
 dev-load:
-	@echo "setting up loadgen schema..."
 	docker compose exec -T postgres psql -U postgres < dev/loadgen_setup.sql
 	go run ./cmd/pgincident-loadgen $(LOADGEN_FLAGS)

@@ -6,21 +6,5 @@ GRANT pg_monitor TO pgincident_dev;
 CREATE TABLE IF NOT EXISTS seed_target (id int primary key, val text);
 INSERT INTO seed_target VALUES (1, 'row for lock testing') ON CONFLICT DO NOTHING;
 
--- Tables used by the loadgen simulator (make dev-load).
-CREATE TABLE IF NOT EXISTS loadgen_accounts (
-    id         bigint        PRIMARY KEY,
-    balance    numeric(12,2) NOT NULL DEFAULT 0,
-    touched_at timestamptz   NOT NULL DEFAULT now()
-);
-CREATE TABLE IF NOT EXISTS loadgen_lock_rows (id int PRIMARY KEY, val text);
-
-INSERT INTO loadgen_accounts (id, balance)
-SELECT i, (random() * 10000)::numeric(12,2)
-FROM   generate_series(1, 10000) AS g(i)
-ON CONFLICT DO NOTHING;
-
-INSERT INTO loadgen_lock_rows VALUES (1, 'lock target A'), (2, 'lock target B')
-ON CONFLICT DO NOTHING;
-
-GRANT SELECT, UPDATE ON loadgen_accounts  TO pgincident_dev;
-GRANT SELECT, UPDATE ON loadgen_lock_rows TO pgincident_dev;
+-- Loadgen tables are created by dev/loadgen_setup.sql, which make dev-up runs
+-- automatically after the container is ready.
