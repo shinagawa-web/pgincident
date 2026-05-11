@@ -43,5 +43,6 @@ dev-seed:
 # Pass LOADGEN_FLAGS to toggle subsystems, e.g.:
 #   make dev-load LOADGEN_FLAGS="--no-locks --no-idle"
 dev-load:
+	@pkill -f pgincident-loadgen 2>/dev/null || true
 	docker compose exec -T postgres psql -U postgres < dev/loadgen_setup.sql
 	go run ./cmd/pgincident-loadgen $(LOADGEN_FLAGS)
