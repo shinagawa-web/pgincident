@@ -1,4 +1,4 @@
-.PHONY: build run test test-integration lint tidy install-hooks dev-up dev-down dev-seed
+.PHONY: build run test test-integration lint tidy install-hooks dev-up dev-down dev-seed dev-load
 
 build:
 	go build ./...
@@ -36,3 +36,12 @@ dev-down:
 dev-seed:
 	@echo "open 4 terminals and run the commands in dev/seed.sql"
 	@cat dev/seed.sql
+
+# dev-load: spin up a realistic, sustained workload against the dev Postgres.
+# All four subsystems (tps/slow/locks/idle) are enabled by default.
+# Pass LOADGEN_FLAGS to toggle subsystems, e.g.:
+#   make dev-load LOADGEN_FLAGS="--no-locks --no-idle"
+dev-load:
+	@echo "setting up loadgen schema..."
+	docker compose exec -T postgres psql -U postgres < dev/loadgen_setup.sql
+	go run ./cmd/pgincident-loadgen $(LOADGEN_FLAGS)

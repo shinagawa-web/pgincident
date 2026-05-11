@@ -35,6 +35,60 @@ Bypass with `git push --no-verify` if needed.
 | `make lint` | Run `go vet` |
 | `make tidy` | Run `go mod tidy` and verify no diff |
 | `make install-hooks` | Install the pre-push hook |
+| `make dev-load` | Start the workload simulator against the dev DB (see below) |
+
+## End-to-end dashboard evaluation with the workload simulator
+
+`make dev-load` is the default way to evaluate the dashboard as a whole under realistic,
+production-like conditions.
+
+```bash
+# Terminal 1 — start the simulator (Ctrl-C to stop cleanly)
+make dev-load
+
+# Terminal 2 — run the TUI alongside it
+make run
+```
+
+Within roughly 10 seconds all four dashboard sections should show non-empty, time-varying
+data. The "Idle in transaction" section takes ~30 s to populate (that is the detection
+threshold).
+
+> **First run on an existing container:** `make dev-load` runs `dev/loadgen_setup.sql`
+> automatically, which creates and seeds the `loadgen_accounts` and `loadgen_lock_rows`
+> tables. No manual steps are needed. If you started fresh with `make dev-up` the tables
+> are already present via `dev/init.sql`.
+
+### Toggling subsystems
+
+All four subsystems are enabled by default. Disable individual ones via `LOADGEN_FLAGS`:
+
+```bash
+# Only background TPS (no slow queries, no locks, no idle sessions)
+make dev-load LOADGEN_FLAGS="--no-slow --no-locks --no-idle"
+
+# Only lock contention
+make dev-load LOADGEN_FLAGS="--no-tps --no-slow --no-idle"
+```
+
+Available flags for `go run ./cmd/pgincident-loadgen`:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--no-tps` | false | Disable background TPS workers |
+| `--no-slow` | false | Disable slow-query workers |
+| `--no-locks` | false | Disable lock contention workers |
+| `--no-idle` | false | Disable idle-in-transaction workers |
+| `--tps-workers N` | 8 | Number of background TPS connections |
+| `--slow-interval D` | 6s | Delay between slow queries per worker |
+| `--idle-duration D` | 45s | How long each idle-in-transaction session lingers |
+| `--dsn URL` | env `DATABASE_URL` | PostgreSQL DSN |
+
+### Connection budget
+
+The simulator opens at most ~15 connections by default
+(8 TPS pool + 2 slow + 2 lock holder/waiter + 2 idle).
+Adjust `--tps-workers` if your dev Postgres has a lower `max_connections`.
 
 ## Simulating incident scenarios
 
