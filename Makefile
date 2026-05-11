@@ -1,4 +1,4 @@
-.PHONY: build run test test-integration lint tidy install-hooks dev-up dev-down dev-seed
+.PHONY: build run test test-integration lint tidy install-hooks dev-up dev-down dev-seed dev-load
 
 VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "dev")
 LDFLAGS := -X github.com/shinagawa-web/pgincident/internal/version.Version=$(VERSION)
@@ -31,6 +31,7 @@ dev-up:
 	docker compose up -d
 	@echo "waiting for postgres..."
 	@until docker compose exec postgres pg_isready -q; do sleep 1; done
+	docker compose exec -T postgres psql -U postgres < dev/loadgen_setup.sql
 	@echo "ready. DSN: postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres"
 
 dev-down:
@@ -39,3 +40,12 @@ dev-down:
 dev-seed:
 	@echo "open 4 terminals and run the commands in dev/seed.sql"
 	@cat dev/seed.sql
+
+# dev-load: spin up a realistic, sustained workload against the dev Postgres.
+# All four subsystems (tps/slow/locks/idle) are enabled by default.
+# Pass LOADGEN_FLAGS to toggle subsystems, e.g.:
+#   make dev-load LOADGEN_FLAGS="--no-locks --no-idle"
+dev-load:
+	@pkill -f pgincident-loadgen 2>/dev/null || true
+	docker compose exec -T postgres psql -U postgres < dev/loadgen_setup.sql
+	go run ./cmd/pgincident-loadgen $(LOADGEN_FLAGS)

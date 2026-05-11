@@ -35,6 +35,26 @@ Bypass with `git push --no-verify` if needed.
 | `make lint` | Run `go vet` |
 | `make tidy` | Run `go mod tidy` and verify no diff |
 | `make install-hooks` | Install the pre-push hook |
+| `make dev-load` | Start the workload simulator against the dev DB (see below) |
+
+## End-to-end dashboard evaluation with the workload simulator
+
+`make dev-load` is the default way to evaluate the dashboard as a whole under realistic,
+production-like conditions.
+
+```bash
+# Terminal 1 — start the simulator (Ctrl-C to stop cleanly)
+make dev-load
+
+# Terminal 2 — run the TUI alongside it
+make run
+```
+
+Within roughly 10 seconds all four dashboard sections should show non-empty, time-varying
+data. The "Idle in transaction" section takes ~30 s to populate (that is the detection
+threshold).
+
+For how the simulator works internally, see [docs/dev-load.md](docs/dev-load.md).
 
 ## Simulating incident scenarios
 
