@@ -97,11 +97,11 @@ Note: `pg_stat_statements` (v0.2) can be heavier on systems with many unique que
 
 ## 8. Testing
 
-Planned for v0.1.1 (see issue [#10](https://github.com/shinagawa-web/pgincident/issues/10)). Strategy:
-
-- **Unit tests**: pure Go logic (formatters, poller math) — no DB
-- **Integration tests**: real Postgres via `DATABASE_URL`; skipped if unreachable
-- **CI**: GitHub Actions with Postgres 16 service container
+- **Unit tests** (`internal/core/`, `internal/tui/`) — pure Go logic: formatters, poller math, TUI rendering (golden files + e2e). No DB required. 100% statement coverage enforced.
+- **Integration tests** (`internal/core/integration_test.go`) — real Postgres via `DATABASE_URL`; skipped automatically if the env var is not set.
+- **CI** — two GitHub Actions jobs:
+  - *Unit tests*: `go test -race -coverprofile` on every push/PR; coverage uploaded to Codecov.
+  - *Integration tests*: Postgres 16 service container; runs `TestIntegration*` suite.
 
 ## 9. UX Details
 
