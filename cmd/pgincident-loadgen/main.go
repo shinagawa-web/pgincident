@@ -70,20 +70,24 @@ func main() {
 
 	if !*noSlow {
 		enabled = append(enabled, "slow")
-		// Short: 2 workers, 6–11 s queries cycling quickly.
+		// Short: 2 workers, 6–11 s queries cycling quickly, staggered by 5 s.
 		for i := 0; i < 2; i++ {
 			wg.Add(1)
-			go func(idx int) {
+			go func(delay time.Duration) {
 				defer wg.Done()
-				runSlowWorker(ctx, *dsn, 6, 11, 10*time.Second, idx)
-			}(i)
+				runSlowWorker(ctx, *dsn, 6, 11, 10*time.Second, delay)
+			}(time.Duration(i) * 5 * time.Second)
 		}
-		// Long: 1 worker, 5–8 min queries that stay visible for minutes.
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			runSlowWorker(ctx, *dsn, 300, 480, 30*time.Second, 0)
-		}()
+		// Long: 2 workers staggered by ~3 min. Worker 0 starts immediately;
+		// worker 1 starts after half the average query duration (390 s / 2 = 195 s)
+		// so the two overlap for roughly half of each cycle.
+		for i := 0; i < 2; i++ {
+			wg.Add(1)
+			go func(delay time.Duration) {
+				defer wg.Done()
+				runSlowWorker(ctx, *dsn, 300, 480, 30*time.Second, delay)
+			}(time.Duration(i) * 195 * time.Second)
+		}
 	}
 
 	if !*noLocks {
@@ -156,8 +160,9 @@ func runTPSWorker(ctx context.Context, pool *pgxpool.Pool) {
 }
 
 // runSlowWorker periodically runs analytical queries sleeping for [minSecs, maxSecs].
-// gap is the pause between consecutive queries. workerIdx staggers the start.
-func runSlowWorker(ctx context.Context, dsn string, minSecs, maxSecs int, gap time.Duration, workerIdx int) {
+// gap is the pause between consecutive queries.
+// initialDelay staggers workers so they don't all fire at the same time.
+func runSlowWorker(ctx context.Context, dsn string, minSecs, maxSecs int, gap, initialDelay time.Duration) {
 	conn, err := pgx.Connect(ctx, dsn)
 	if err != nil {
 		log.Printf("slow worker connect: %v", err)
@@ -165,8 +170,7 @@ func runSlowWorker(ctx context.Context, dsn string, minSecs, maxSecs int, gap ti
 	}
 	defer conn.Close(context.Background()) //nolint:errcheck
 
-	// Stagger workers to avoid simultaneous queries.
-	sleep(ctx, time.Duration(workerIdx)*gap/2)
+	sleep(ctx, initialDelay)
 
 	for ctx.Err() == nil {
 		sleepSecs := minSecs + rand.IntN(maxSecs-minSecs+1)
