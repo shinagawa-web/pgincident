@@ -170,3 +170,20 @@ Three key decisions behind this tool:
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, architecture, and how to simulate incident scenarios.
+
+## PostgreSQL configuration
+
+pgincident reads the full query text from `pg_stat_activity.query`. PostgreSQL truncates this column at `track_activity_query_size` bytes (default: **1024**). With the default, long queries are cut off before they overflow the detail overlay, making the scroll feature useless in practice.
+
+Raise the limit to get the most out of the query detail overlay:
+
+```sql
+-- Check the current value
+SHOW track_activity_query_size;
+
+-- Apply permanently (requires superuser + server restart)
+ALTER SYSTEM SET track_activity_query_size = 65536;
+SELECT pg_reload_conf(); -- not enough alone; a restart is required
+```
+
+For the local dev container, the `docker-compose.yml` already sets `track_activity_query_size=65536`. On managed databases (RDS, Cloud SQL), set the parameter in the parameter group and reboot the instance.

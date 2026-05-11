@@ -179,6 +179,12 @@ func TestFormatSQL(t *testing.T) {
 			width: 80,
 			want:  "WITH paused AS (\nSELECT pg_sleep(60))\nSELECT id\nFROM t\nWHERE id = 1",
 		},
+		{
+			name:  "width=1 guard: contWidth clamped to 1",
+			s:     "SELECT a, b FROM t",
+			width: 1,
+			want:  "SELECT\n  a,\n  b\nFROM\n  t",
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
