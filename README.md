@@ -9,19 +9,9 @@ Production Postgres is slow. You open psql and start firing queries — `pg_stat
 
 **pgincident** collapses that into a live TUI: a global health overview to spot the problem, then a per-category incident dashboard to dig in.
 
-## 1. Product Definition
-
-### 1.1 Positioning
+## 1. Positioning
 
 Targets SREs and Web engineers who reach for `psql -c "SELECT * FROM pg_stat_activity"` when production gets slow. Opens with a global health overview screen, then lets you drill into per-category incident views — replacing a sequence of manual queries with a two-screen live TUI.
-
-### 1.2 Non-goals
-
-- Replacing pgAdmin / DBeaver (no schema browsing, no query editor)
-- Long-term metrics storage (Prometheus, Grafana already do this)
-- Replication monitoring (later version)
-- System stats (CPU/IO/mem) — pgcenter does this; we focus on Postgres internals
-- Multi-instance dashboard (one connection at a time)
 
 ## 2. v0.1 Feature Scope
 
@@ -67,6 +57,14 @@ Idle in transaction (> 30s)                                            [2 idle]
 - Post-mortem export (v0.7)
 - Snapshot replay, Azure/Neon/Supabase (v1.0)
 - Web UI (v2.0)
+
+## 3. Non-goals
+
+- Replacing pgAdmin / DBeaver (no schema browsing, no query editor)
+- Long-term metrics storage (Prometheus, Grafana already do this)
+- Replication monitoring (later version)
+- System stats (CPU/IO/mem) — pgcenter does this; we focus on Postgres internals
+- Multi-instance dashboard (one connection at a time)
 
 ## 5. SQL Catalog
 
