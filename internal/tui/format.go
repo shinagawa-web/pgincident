@@ -95,7 +95,11 @@ func formatSQL(s string, width int) string {
 		if clause == "" {
 			continue
 		}
-		parts := strings.Split(wrapText(clause, width), "\n")
+		wrapWidth := width - 2
+		if wrapWidth < 1 {
+			wrapWidth = 1
+		}
+		parts := strings.Split(wrapText(clause, wrapWidth), "\n")
 		lines = append(lines, parts[0])
 		for _, cont := range parts[1:] {
 			lines = append(lines, "  "+cont)

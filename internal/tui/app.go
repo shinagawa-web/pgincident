@@ -29,21 +29,25 @@ const (
 
 // App is the root Bubble Tea model.
 type App struct {
-	poller     *core.Poller
-	pollCh     chan core.PollResult
-	cancel     context.CancelFunc
-	snapshot   core.Snapshot
-	screen     Screen
-	section    Section
-	cursor     [sectionCount]int
-	width      int
-	height     int
-	lastErr    error
-	statusMsg  string
-	showHelp   bool
-	showDetail bool
-	detailItem *core.Activity
-	quitting   bool
+	poller       *core.Poller
+	pollCh       chan core.PollResult
+	cancel       context.CancelFunc
+	snapshot     core.Snapshot
+	screen       Screen
+	section      Section
+	cursor       [sectionCount]int
+	width        int
+	height       int
+	lastErr      error
+	statusMsg    string
+	showHelp         bool
+	showDetail       bool
+	detailItem       *core.Activity
+	detailScroll     int
+	detailLines      []string       // cached formatted lines; valid when detailLinesItem == detailItem && detailLinesWidth == width
+	detailLinesItem  *core.Activity
+	detailLinesWidth int
+	quitting         bool
 }
 
 func New(poller *core.Poller) *App {
@@ -69,6 +73,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.width, a.height = msg.Width, msg.Height
+		if a.showDetail && a.detailItem != nil {
+			a.detailScroll = a.clampScroll(a.detailScroll)
+		}
 	case snapshotMsg:
 		if msg.Err != nil {
 			a.lastErr = msg.Err
@@ -85,8 +92,28 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if a.showDetail {
+		if a.detailItem == nil {
+			a.showDetail = false
+			a.detailScroll = 0
+			return a, nil
+		}
+		sqlRows := a.height - 4
+		total := len(a.getDetailLines())
+		switch msg.String() {
+		case "up", "k":
+			if a.detailScroll > 0 {
+				a.detailScroll--
+			}
+			return a, nil
+		case "down", "j":
+			if total > sqlRows {
+				a.detailScroll = a.clampScroll(a.detailScroll + 1)
+			}
+			return a, nil
+		}
 		a.showDetail = false
 		a.detailItem = nil
+		a.detailScroll = 0
 		return a, nil
 	}
 	if a.showHelp {
@@ -128,6 +155,8 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if act := a.selectedActivity(); act != nil {
 				a.showDetail = true
 				a.detailItem = act
+				a.detailScroll = 0
+				a.detailLines = nil
 			}
 		}
 	}
@@ -229,6 +258,37 @@ func (a *App) View() string {
 	return strings.Join(parts, "\n")
 }
 
+func (a *App) getDetailLines() []string {
+	if a.detailItem == nil {
+		return nil
+	}
+	if a.detailLines == nil || a.detailLinesItem != a.detailItem || a.detailLinesWidth != a.width {
+		a.detailLines = strings.Split(formatSQL(a.detailItem.Query, a.width), "\n")
+		a.detailLinesItem = a.detailItem
+		a.detailLinesWidth = a.width
+	}
+	return a.detailLines
+}
+
+func (a *App) clampScroll(offset int) int {
+	if a.detailItem == nil {
+		return 0
+	}
+	sqlRows := a.height - 4
+	total := len(a.getDetailLines())
+	maxScroll := total - sqlRows
+	if maxScroll <= 0 {
+		return 0
+	}
+	if offset > maxScroll {
+		return maxScroll
+	}
+	if offset < 0 {
+		return 0
+	}
+	return offset
+}
+
 func (a *App) renderHelp() string {
 	content := boldStyle.Render("pgincident v"+version.Version) + "\n\n" +
 		"  q / Ctrl-C    quit\n" +
@@ -253,20 +313,40 @@ func (a *App) renderDetail() string {
 	// title + sep + sep + footer = 4 fixed rows; SQL fills the rest.
 	sqlRows := a.height - 4
 
-	sqlLines := strings.Split(formatSQL(act.Query, a.width), "\n")
-	for i, line := range sqlLines {
+	rawLines := a.getDetailLines()
+	sqlLines := make([]string, len(rawLines))
+	for i, line := range rawLines {
 		sqlLines[i] = highlightSQL(line)
 	}
-	for len(sqlLines) < sqlRows {
-		sqlLines = append(sqlLines, "")
+	total := len(sqlLines)
+
+	// Compute the visible window without mutating detailScroll.
+	start := a.detailScroll
+	if start > total {
+		start = total
+	}
+	end := start + sqlRows
+	if end > total {
+		end = total
+	}
+	visible := append([]string{}, sqlLines[start:end]...)
+	for len(visible) < sqlRows {
+		visible = append(visible, "")
+	}
+
+	var footer string
+	if total > sqlRows {
+		footer = footerStyle.Render("[↑/↓/k/j] scroll · [any other key] close")
+	} else {
+		footer = footerStyle.Render("[any key] close")
 	}
 
 	parts := []string{
 		boldStyle.Render(fmt.Sprintf("Query Detail — PID %d", act.PID)),
 		sep,
-		strings.Join(sqlLines[:sqlRows], "\n"),
+		strings.Join(visible, "\n"),
 		sep,
-		footerStyle.Render("[any key] close"),
+		footer,
 	}
 	return strings.Join(parts, "\n")
 }

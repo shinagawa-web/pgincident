@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16
+    command: postgres -c track_activity_query_size=65536
     environment:
       POSTGRES_PASSWORD: postgres
     ports:

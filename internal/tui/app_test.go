@@ -480,6 +480,7 @@ func TestDetailCloseOnAnyKey(t *testing.T) {
 	act := core.Activity{PID: 1001, Query: "SELECT 1"}
 	app.showDetail = true
 	app.detailItem = &act
+	app.detailScroll = 2
 	model, _ := app.handleKey(key("x"))
 	a := model.(*App)
 	if a.showDetail {
@@ -487,6 +488,9 @@ func TestDetailCloseOnAnyKey(t *testing.T) {
 	}
 	if a.detailItem != nil {
 		t.Error("expected detailItem=nil after closing detail")
+	}
+	if a.detailScroll != 0 {
+		t.Errorf("expected detailScroll=0 after closing detail, got %d", a.detailScroll)
 	}
 }
 
@@ -644,6 +648,134 @@ func TestNewDefaultsToOverview(t *testing.T) {
 	app.cancel()
 }
 
+// --- detail scroll ---
+
+// overflowQuery is long enough that at width=100, height=24 (sqlRows=20) the overlay overflows.
+const overflowQuery = "WITH paused AS (SELECT pg_sleep(60)) SELECT a.pid, a.usename, a.application_name, a.client_addr, a.client_hostname, a.client_port, a.backend_start, a.xact_start, a.query_start, a.state_change, a.wait_event_type, a.wait_event, a.state, a.backend_xid, a.backend_xmin, a.query, a.backend_type, a.leader_pid, l.locktype, l.database, l.relation::regclass AS locked_table, l.page, l.tuple, l.virtualxid, l.transactionid, l.classid, l.objid, l.objsubid, l.virtualtransaction, l.pid AS lock_pid, l.mode, l.granted, l.fastpath, s.seq_scan, s.seq_tup_read, s.idx_scan, s.idx_tup_fetch, s.n_tup_ins, s.n_tup_upd, s.n_tup_del, s.n_tup_hot_upd, s.n_live_tup, s.n_dead_tup, s.n_mod_since_analyze, s.last_vacuum, s.last_autovacuum, s.last_analyze, s.last_autoanalyze, ui.indexrelname, ui.idx_scan AS idx_idx_scan, ui.idx_tup_read, ui.idx_tup_fetch AS idx_tup_fetch2, bg.checkpoints_timed, bg.checkpoints_req, bg.checkpoint_write_time, bg.checkpoint_sync_time, bg.buffers_checkpoint, bg.buffers_clean, bg.maxwritten_clean, bg.buffers_backend, bg.buffers_backend_fsync, bg.buffers_alloc, bg.stats_reset AS bg_stats_reset, r.usesysid AS repl_usesysid, r.usename AS repl_usename, r.application_name AS repl_app_name, r.client_addr AS repl_client_addr, r.state AS repl_state, r.sent_lsn, r.write_lsn, r.flush_lsn, r.replay_lsn, r.write_lag, r.flush_lag, r.replay_lag, r.sync_priority, r.sync_state, ssl.ssl, ssl.version AS ssl_version, ssl.cipher AS ssl_cipher, ssl.bits AS ssl_bits, now() - a.query_start AS query_duration, now() - a.xact_start AS xact_duration, now() - a.state_change AS time_in_state, now() - a.backend_start AS connection_age FROM paused, pg_stat_activity a JOIN pg_locks l ON l.pid = a.pid AND l.granted = false JOIN pg_stat_user_tables s ON s.relid = l.relation JOIN pg_stat_bgwriter bg ON TRUE LEFT JOIN pg_stat_replication r ON r.pid = a.pid LEFT JOIN pg_stat_ssl ssl ON ssl.pid = a.pid LEFT JOIN pg_stat_user_indexes ui ON ui.relid = s.relid LEFT JOIN pg_stat_wal_receiver wr ON TRUE LEFT JOIN pg_stat_archiver arch ON TRUE WHERE a.state != 'idle' AND a.pid != pg_backend_pid() ORDER BY query_duration DESC LIMIT 50"
+
+func detailApp() *App {
+	app := newTestApp() // width=100
+	app.height = 24    // sqlRows = 20; overflowQuery overflows at this height
+	act := core.Activity{PID: 5000, Query: overflowQuery}
+	app.showDetail = true
+	app.detailItem = &act
+	return app
+}
+
+func TestDetailScrollDown(t *testing.T) {
+	app := detailApp()
+	model, _ := app.handleKey(key("j"))
+	a := model.(*App)
+	if a.detailScroll != 1 {
+		t.Errorf("detailScroll = %d, want 1 after j", a.detailScroll)
+	}
+}
+
+func TestDetailScrollDownViaArrow(t *testing.T) {
+	app := detailApp()
+	model, _ := app.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	a := model.(*App)
+	if a.detailScroll != 1 {
+		t.Errorf("detailScroll = %d, want 1 after Down", a.detailScroll)
+	}
+}
+
+func TestDetailScrollBoundUpper(t *testing.T) {
+	app := detailApp()
+	lines := strings.Split(formatSQL(overflowQuery, app.width), "\n")
+	sqlRows := app.height - 4
+	maxScroll := len(lines) - sqlRows
+	app.detailScroll = maxScroll - 1
+	model, _ := app.handleKey(key("j"))
+	model, _ = model.(*App).handleKey(key("j"))
+	a := model.(*App)
+	if a.detailScroll != maxScroll {
+		t.Errorf("detailScroll = %d, want %d (clamped at max)", a.detailScroll, maxScroll)
+	}
+}
+
+func TestDetailScrollUp(t *testing.T) {
+	app := detailApp()
+	app.detailScroll = 5
+	model, _ := app.handleKey(key("k"))
+	a := model.(*App)
+	if a.detailScroll != 4 {
+		t.Errorf("detailScroll = %d, want 4 after k", a.detailScroll)
+	}
+}
+
+func TestDetailScrollUpViaArrow(t *testing.T) {
+	app := detailApp()
+	app.detailScroll = 5
+	model, _ := app.handleKey(tea.KeyMsg{Type: tea.KeyUp})
+	a := model.(*App)
+	if a.detailScroll != 4 {
+		t.Errorf("detailScroll = %d, want 4 after Up", a.detailScroll)
+	}
+}
+
+func TestDetailScrollBoundLower(t *testing.T) {
+	app := detailApp()
+	// Already at 0; pressing up should stay at 0.
+	model, _ := app.handleKey(key("k"))
+	a := model.(*App)
+	if a.detailScroll != 0 {
+		t.Errorf("detailScroll = %d, want 0 (clamped at min)", a.detailScroll)
+	}
+}
+
+func TestHandleKeyDetailNilItem(t *testing.T) {
+	app := newTestApp()
+	app.showDetail = true
+	app.detailItem = nil
+	model, _ := app.handleKey(key("j"))
+	a := model.(*App)
+	if a.showDetail {
+		t.Error("showDetail should be false after keypress with nil detailItem")
+	}
+}
+
+func TestGetDetailLinesNilItem(t *testing.T) {
+	app := newTestApp()
+	if lines := app.getDetailLines(); lines != nil {
+		t.Errorf("getDetailLines() with nil detailItem = %v, want nil", lines)
+	}
+}
+
+func TestDetailScrollResetOnOpen(t *testing.T) {
+	app := newTestApp()
+	app.height = 24
+	app.snapshot.Activities = []core.Activity{{PID: 5001, Query: overflowQuery}}
+	app.section = SectionActivity
+	app.detailScroll = 99 // stale scroll from a previous session
+	model, _ := app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	a := model.(*App)
+	if a.detailScroll != 0 {
+		t.Errorf("detailScroll = %d, want 0 after opening overlay", a.detailScroll)
+	}
+}
+
+func TestViewDetailScrollFooter(t *testing.T) {
+	app := detailApp()
+	v := app.View()
+	if !strings.Contains(v, "[↑/↓/k/j] scroll") {
+		t.Errorf("expected scroll footer when SQL overflows, got: %q", v)
+	}
+}
+
+func TestViewDetailNoScrollFooter(t *testing.T) {
+	app := newTestApp()
+	act := core.Activity{PID: 6000, Query: "SELECT 1"}
+	app.showDetail = true
+	app.detailItem = &act
+	v := app.View()
+	if !strings.Contains(v, "[any key] close") {
+		t.Errorf("expected simple footer for short SQL, got: %q", v)
+	}
+	if strings.Contains(v, "[↑/↓/k/j] scroll") {
+		t.Errorf("unexpected scroll footer for short SQL, got: %q", v)
+	}
+}
 // --- New ---
 
 type mockQuerier struct{}
@@ -672,6 +804,161 @@ func TestNew(t *testing.T) {
 		t.Error("expected pollCh to be set")
 	}
 	app.cancel()
+}
+
+// --- clampScroll ---
+
+func TestClampScrollNilItem(t *testing.T) {
+	app := newTestApp()
+	if got := app.clampScroll(5); got != 0 {
+		t.Errorf("clampScroll with nil detailItem = %d, want 0", got)
+	}
+}
+
+func TestClampScrollNoOverflow(t *testing.T) {
+	app := newTestApp()
+	act := core.Activity{PID: 1, Query: "SELECT 1"}
+	app.detailItem = &act
+	// 1 formatted line; sqlRows = height(30)-4 = 26 → maxScroll ≤ 0
+	if got := app.clampScroll(5); got != 0 {
+		t.Errorf("clampScroll with no overflow = %d, want 0", got)
+	}
+}
+
+func TestClampScrollNegativeOffset(t *testing.T) {
+	app := detailApp()
+	if got := app.clampScroll(-1); got != 0 {
+		t.Errorf("clampScroll(-1) = %d, want 0", got)
+	}
+}
+
+func TestUpdateWindowSizeDetailOpen(t *testing.T) {
+	app := detailApp()
+	app.detailScroll = 5
+	// Resize to a very tall terminal: sqlRows = 50-4 = 46 > 31 lines → maxScroll=0 → scroll clamped.
+	model, _ := app.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
+	a := model.(*App)
+	if a.detailScroll != 0 {
+		t.Errorf("detailScroll = %d, want 0 after resize clamp", a.detailScroll)
+	}
+}
+
+// countSQLLines returns the number of lines between the two separator lines in the detail view.
+func countSQLLines(view string) int {
+	lines := strings.Split(view, "\n")
+	sep := 0
+	count := 0
+	for _, l := range lines {
+		if strings.HasPrefix(l, "────") {
+			sep++
+			continue
+		}
+		if sep == 1 {
+			count++
+		}
+		if sep == 2 {
+			break
+		}
+	}
+	return count
+}
+
+// TestDetailSQLLinesFilledByHeight verifies that the SQL area always contains exactly
+// height-4 lines (padded with blank lines when the query is shorter than the window).
+// Heights below minHeight (24) show a "too small" message and are not tested here.
+func TestDetailSQLLinesFilledByHeight(t *testing.T) {
+	for _, h := range []int{24, 30, 40} {
+		app := newTestApp()
+		app.width = 100
+		app.height = h
+		act := core.Activity{PID: 1, Query: overflowQuery}
+		app.showDetail = true
+		app.detailItem = &act
+		got := countSQLLines(app.View())
+		want := h - 4
+		if got != want {
+			t.Errorf("height=%d: SQL lines = %d, want %d", h, got, want)
+		}
+	}
+}
+
+// TestDetailResizeWidthNarrowShowsScrollFooter verifies that narrowing the terminal
+// while the detail overlay is open triggers overflow and shows the scroll footer.
+// At width=200 height=30 the query fits (23 lines < sqlRows=26).
+// After resize to width=100 the query expands to 31 lines > 26 → overflow.
+func TestDetailResizeWidthNarrowShowsScrollFooter(t *testing.T) {
+	app := newTestApp()
+	app.width = 200
+	app.height = 30
+	act := core.Activity{PID: 1, Query: overflowQuery}
+	app.showDetail = true
+	app.detailItem = &act
+
+	if strings.Contains(app.View(), "scroll") {
+		t.Fatal("expected no scroll footer at width=200 height=30 before resize")
+	}
+
+	model, _ := app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	a := model.(*App)
+	if !strings.Contains(a.View(), "scroll") {
+		t.Error("expected scroll footer after resize to width=100 height=30")
+	}
+}
+
+// TestDetailResizeHeightExpandHidesScrollFooter verifies that expanding the terminal
+// while scrolling is active removes the scroll footer once the query fits.
+// At height=24 the query overflows (31 lines > sqlRows=20).
+// After resize to height=36 the query fits (31 lines ≤ sqlRows=32).
+func TestDetailResizeHeightExpandHidesScrollFooter(t *testing.T) {
+	app := detailApp() // width=100, height=24 → overflow
+	if !strings.Contains(app.View(), "scroll") {
+		t.Fatal("expected scroll footer at height=24 before resize")
+	}
+
+	model, _ := app.Update(tea.WindowSizeMsg{Width: 100, Height: 36})
+	a := model.(*App)
+	v := a.View()
+	if strings.Contains(v, "[↑/↓/k/j] scroll") {
+		t.Error("expected scroll footer to disappear after resize to height=36")
+	}
+	if !strings.Contains(v, "[any key] close") {
+		t.Error("expected [any key] close footer after resize to height=36")
+	}
+}
+
+// TestDetailResizeHeightShrinkShowsScrollFooter verifies that shrinking the terminal
+// causes the scroll footer to appear when the query no longer fits.
+// At width=150 height=30 the query formats to 26 lines = sqlRows=26 → no overflow.
+// After resize to height=24 the query overflows (26 lines > sqlRows=20).
+func TestDetailResizeHeightShrinkShowsScrollFooter(t *testing.T) {
+	app := newTestApp()
+	app.width = 150
+	app.height = 30
+	act := core.Activity{PID: 1, Query: overflowQuery}
+	app.showDetail = true
+	app.detailItem = &act
+
+	if strings.Contains(app.View(), "scroll") {
+		t.Fatal("expected no scroll footer at width=150 height=30 before resize")
+	}
+
+	model, _ := app.Update(tea.WindowSizeMsg{Width: 150, Height: 24})
+	a := model.(*App)
+	if !strings.Contains(a.View(), "scroll") {
+		t.Error("expected scroll footer after resize to height=24")
+	}
+}
+
+func TestRenderDetailStartBeyondTotal(t *testing.T) {
+	app := newTestApp()
+	act := core.Activity{PID: 7000, Query: "SELECT 1"}
+	app.showDetail = true
+	app.detailItem = &act
+	app.detailScroll = 999 // beyond total; start should clamp to total
+	v := app.View()
+	if !strings.Contains(v, "7000") {
+		t.Errorf("expected PID in detail view with out-of-range scroll, got: %q", v)
+	}
 }
 
 // --- Init ---

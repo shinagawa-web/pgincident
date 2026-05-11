@@ -169,6 +169,54 @@ func TestIntegrationIdleInTx(t *testing.T) {
 	t.Errorf("PID %d never appeared in IdleInTx(threshold=0) within 5s", targetPID)
 }
 
+// TestIntegrationLongRunningQueryNotTruncated verifies that LongRunning returns the full
+// query text without truncation, so the detail overlay can show the complete SQL.
+func TestIntegrationLongRunningQueryNotTruncated(t *testing.T) {
+	c := integrationClient(t)
+	ctx := context.Background()
+
+	// A query that is deliberately longer than 200 characters (actual length ~214 chars).
+	longQuery := "SELECT pg_sleep(30), 1 AS col001, 1 AS col002, 1 AS col003, 1 AS col004, " +
+		"1 AS col005, 1 AS col006, 1 AS col007, 1 AS col008, 1 AS col009, 1 AS col010, " +
+		"1 AS col011, 1 AS col012, 1 AS col013, 1 AS col014, 1 AS col015"
+
+	sleepConn, err := pgx.Connect(ctx, os.Getenv("DATABASE_URL"))
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	targetPID := int(sleepConn.PgConn().PID())
+	sleepCtx, sleepCancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sleepConn.Exec(sleepCtx, longQuery) //nolint:errcheck
+	}()
+	t.Cleanup(func() {
+		sleepCancel()
+		<-done
+		sleepConn.Close(ctx) //nolint:errcheck
+	})
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		activities, err := c.LongRunning(ctx, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, a := range activities {
+			if a.PID != targetPID {
+				continue
+			}
+			if len(a.Query) <= 200 {
+				t.Errorf("Query truncated to %d chars, want > 200", len(a.Query))
+			}
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Errorf("PID %d never appeared in LongRunning within 5s", targetPID)
+}
+
 func TestIntegrationLocks(t *testing.T) {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {

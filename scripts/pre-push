@@ -32,11 +32,12 @@ else
   exit 1
 fi
 
-if [ -n "$DATABASE_URL" ]; then
-  echo "==> Running integration tests..."
-  go test -race -v -timeout 2m -run Integration ./internal/core/...
-else
-  echo "==> Skipping integration tests (DATABASE_URL not set)"
+if [ -z "$DATABASE_URL" ]; then
+  echo "DATABASE_URL is not set — integration tests are required before pushing."
+  echo "Run 'make dev-up' to start Postgres, then set DATABASE_URL and retry."
+  exit 1
 fi
+echo "==> Running integration tests..."
+go test -race -v -timeout 2m -run Integration ./internal/core/...
 
 echo "==> All checks passed."

@@ -1,7 +1,7 @@
 Query Detail — PID 1001
 ────────────────────────────────────────────────────────────────────────────────
-SELECT u.id, u.name, u.email, o.id AS order_id, o.status, o.total_amount, p.name
-  AS product_name
+SELECT u.id, u.name, u.email, o.id AS order_id, o.status, o.total_amount,
+  p.name AS product_name
 FROM users u
 JOIN orders o ON o.user_id = u.id
 JOIN order_items oi ON oi.order_id = o.id
