@@ -107,9 +107,9 @@ Planned for v0.1.1 (see issue [#10](https://github.com/shinagawa-web/pgincident/
 
 ### 9.1 Three-level design (target architecture)
 
-> v0.1 ships a single dashboard screen (Level 2 entry point). Level 1 overview is planned for v0.1.3; full Level 3 investigation for v0.3.
+> v0.1 ships a single dashboard screen (Level 2 entry point). Level 1 overview shipped in v0.1.3; full Level 3 investigation planned for v0.3.
 
-- **Level 1 — Overview** (v0.1.3) — Global DB health at a glance. Key metrics with status colors (normal / warning / critical). If something is red, drill into Level 2.
+- **Level 1 — Overview** *(shipped v0.1.3)* — Global DB health at a glance. Key metrics with status colors (normal / warning / critical). If something is red, drill into Level 2.
 - **Level 2 — Category view** — Per-category lists: Activity / Locks / I/O / Statements / Tables / Vacuum / Replication / Connections. *(v0.1 ships Activity, Locks, Idle in transaction)*
 - **Level 3 — Process view** (`Enter`, v0.3+) — Individual query and session investigation. Full SQL, wait events, lock chain, cancel/kill.
 
@@ -153,7 +153,7 @@ Three key decisions behind this tool:
 - [x] v0.1 — Incident dashboard
 - [x] v0.1.1 — Unit tests + integration tests + CI
 - [x] v0.1.2 — Query detail overlay (full SQL on `Enter`)
-- [ ] v0.1.3 — Level 1 overview screen — global health indicators with status colors (connections, TPS, cache hit, checkpoint, replication lag, autovacuum)
+- [x] v0.1.3 — Level 1 overview screen — global health indicators with status colors (connections, TPS, cache hit, checkpoint, replication lag, autovacuum)
 - [ ] v0.2 — `pg_stat_statements` integration (slow query history); RDS verification
 - [ ] v0.2.1 — Config file (`~/.pgincident.yml`) — slow query / idle-in-transaction thresholds, default DSN, refresh interval
 - [ ] v0.2.2 — Connection presets in config; in-TUI connection switching
@@ -190,6 +190,7 @@ pgincident/
 │   ├── tui/                       # Bubble Tea Model/View/Update
 │   │   ├── app.go                 # root model
 │   │   ├── header.go
+│   │   ├── overview.go            # Level 1 overview screen
 │   │   ├── activity_view.go
 │   │   ├── locks_view.go
 │   │   ├── idle_view.go
@@ -198,7 +199,7 @@ pgincident/
 │   │   └── format.go              # duration / padding helpers
 │   └── version/
 │       └── version.go
-├── .github/workflows/             # planned in v0.1.1
+├── .github/workflows/
 ├── Makefile
 ├── go.mod / go.sum
 └── README.md
