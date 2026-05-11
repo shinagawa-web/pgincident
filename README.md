@@ -95,7 +95,7 @@ Note: `pg_stat_statements` (v0.2) can be heavier on systems with many unique que
 
 ## 8. Testing
 
-- **Unit tests** (`internal/core/`, `internal/tui/`) — pure Go logic: formatters, poller math, TUI rendering (golden files + e2e). No DB required. 100% statement coverage enforced.
+- **Unit tests** (`internal/core/`, `internal/tui/`) — pure Go logic: formatters, poller math, TUI rendering (golden files + interaction tests with stub data). No DB required. 100% statement coverage enforced.
 - **Integration tests** (`internal/core/integration_test.go`) — real Postgres via `DATABASE_URL`.
 - **CI** — two GitHub Actions jobs:
   - *Unit tests*: `go test -race -coverprofile` on every push/PR; coverage uploaded to Codecov.
