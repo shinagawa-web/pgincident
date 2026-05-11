@@ -1,0 +1,125 @@
+# Usage
+
+## Starting pgincident
+
+Set `DATABASE_URL` and run the binary:
+
+```bash
+DATABASE_URL=postgres://user:pass@host:5432/dbname pgincident
+```
+
+The tool connects, starts polling, and opens the TUI. If `DATABASE_URL` is not set, it falls back to the local dev default (`postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres`).
+
+## Screens
+
+pgincident has three screens. You start on the Overview screen.
+
+### Overview screen
+
+A global health summary. Shows key metrics with status badges:
+
+| Metric | Status thresholds |
+|---|---|
+| Connections | WARN ≥ 80%, CRIT ≥ 90% |
+| TPS | always OK (informational) |
+| Cache hit | WARN < 99%, CRIT < 95% |
+| Checkpoints | WARN ≥ 10 req/interval, CRIT ≥ 20 |
+| Replication lag | WARN ≥ 5s, CRIT ≥ 30s (shown only when standbys exist) |
+| Autovacuum | WARN ≥ 3 workers, CRIT ≥ 5 |
+
+If a metric shows **WARN** or **CRIT**, press `o` to switch to the Dashboard and investigate.
+
+```
+pgincident v0.1.3      connected: 10.0.1.42:5432 (PG 16.1)  interval: 5.0s
+──────────────────────────────────────────────────────────────────────────
+  DB Health Overview
+──────────────────────────────────────────────────────────────────────────
+
+  Metric                Value                 Status
+  ──────────────────────────────────────────────────
+  Connections           142 / 200 (71%)       OK
+  TPS                   2340                  OK
+  Cache hit             99.2%                 OK
+  Checkpoints           req: 0                OK
+  Autovacuum            0 workers             OK
+
+──────────────────────────────────────────────────────────────────────────
+[o]dashboard  [q]uit  [+/-]interval  [?]help
+```
+
+### Dashboard screen
+
+Per-category incident view with three sections. Each section auto-refreshes at the configured interval.
+
+- **Long-running queries** — active queries exceeding the threshold (default 5 s)
+- **Locks** — blocked/blocking session pairs
+- **Idle in transaction** — sessions holding an open transaction beyond the threshold (default 30 s)
+
+```
+pgincident v0.1.3      connected: 10.0.1.42:5432 (PG 16.1)  interval: 5.0s
+Connections: 142/200 (71%)   TPS: 2340   Cache hit: 99.2%
+──────────────────────────────────────────────────────────────────────────
+▶ Long-running queries (> 5s)                               [1 active]
+  PID     USER      DURATION     STATE    QUERY
+  12345   app_user  00:02:14.32  active   SELECT u.* FROM users u JOIN…
+──────────────────────────────────────────────────────────────────────────
+  Locks (waiting)                                           [0 waiting]
+──────────────────────────────────────────────────────────────────────────
+  Idle in transaction (> 30s)                               [0 idle]
+──────────────────────────────────────────────────────────────────────────
+[q]uit  [Tab]section  [↑↓/jk]cursor  [o]overview  [Enter]detail  [+/-]interval  [?]help
+```
+
+### Query detail overlay
+
+Press `Enter` on a row in the Long-running queries section to open the full SQL. The query is formatted with clause breaks and keyword highlighting. Press any key to close.
+
+```
+┌─ Query Detail ──────────────────────────────────────────────────────────┐
+│ PID: 12345   user: app_user   duration: 00:02:14.32   state: active     │
+│ ─────────────────────────────────────────────────────────────────────── │
+│ SELECT                                                                   │
+│   u.id, u.name, u.email,                                                │
+│   o.id AS order_id, o.status, o.total_amount                            │
+│ FROM users u                                                             │
+│ JOIN orders o ON o.user_id = u.id                                       │
+│ WHERE u.status = 'active'                                               │
+│   AND o.created_at > NOW() - INTERVAL '7 days'                         │
+│ ORDER BY o.created_at DESC                                              │
+│ LIMIT 100                                                               │
+└─────────────────────────────────────────────────────────────────────────┘
+[any key] close
+```
+
+## Key bindings
+
+### Overview screen
+
+| Key | Action |
+|---|---|
+| `o` | Switch to Dashboard |
+| `+` / `-` | Increase / decrease refresh interval |
+| `?` | Help overlay |
+| `q` / `Ctrl-C` | Quit |
+
+### Dashboard screen
+
+| Key | Action |
+|---|---|
+| `o` | Switch to Overview |
+| `Tab` | Move to next section |
+| `Shift-Tab` | Move to previous section |
+| `↑` / `k` | Move cursor up |
+| `↓` / `j` | Move cursor down |
+| `Enter` | Open query detail overlay (Long-running queries only) |
+| `+` / `-` | Increase / decrease refresh interval |
+| `?` | Help overlay |
+| `q` / `Ctrl-C` | Quit |
+
+### Query detail overlay
+
+| Key | Action |
+|---|---|
+| `↑` / `k` | Scroll up |
+| `↓` / `j` | Scroll down |
+| any other key | Close overlay |

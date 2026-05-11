@@ -9,6 +9,8 @@ Production Postgres is slow. You open psql and start firing queries — `pg_stat
 
 **pgincident** collapses that into a live TUI: a global health overview to spot the problem, then a per-category incident dashboard to dig in.
 
+→ **[Usage guide](docs/usage.md)** — startup, screens, key bindings
+
 ## 1. Positioning
 
 Targets SREs and Web engineers who reach for `psql -c "SELECT * FROM pg_stat_activity"` when production gets slow. Opens with a global health overview screen, then lets you drill into per-category incident views — replacing a sequence of manual queries with a two-screen live TUI.
@@ -119,16 +121,7 @@ Note: `pg_stat_statements` (v0.2) can be heavier on systems with many unique que
 
 ### 9.3 Key bindings
 
-| Key | Action |
-|---|---|
-| `q` / `Ctrl-C` | Quit |
-| `o` | Toggle overview / dashboard |
-| `Tab` | Next section |
-| `Shift-Tab` | Previous section |
-| `↑` / `↓` / `j` / `k` | Move cursor in active section |
-| `Enter` | Query detail overlay (dashboard only) |
-| `+` / `-` | Increase / decrease refresh interval |
-| `?` | Help overlay |
+See [docs/usage.md](docs/usage.md) for the full key binding reference per screen.
 
 ## Why pgincident?
 
