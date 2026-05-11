@@ -80,14 +80,20 @@ Available flags for `go run ./cmd/pgincident-loadgen`:
 | `--no-locks` | false | Disable lock contention workers |
 | `--no-idle` | false | Disable idle-in-transaction workers |
 | `--tps-workers N` | 8 | Number of background TPS connections |
-| `--slow-interval D` | 6s | Delay between slow queries per worker |
-| `--idle-duration D` | 45s | How long each idle-in-transaction session lingers |
 | `--dsn URL` | env `DATABASE_URL` | PostgreSQL DSN |
+
+Each subsystem runs **short-lived and long-lived sessions concurrently** from startup:
+
+| Subsystem | Short | Long |
+|---|---|---|
+| Slow queries | 6–11 s, cycles quickly | 5–8 min, stays visible for minutes |
+| Locks | row 1, 8–18 s hold | row 2, 5–8 min hold |
+| Idle in transaction | 45 s, 2 staggered workers | 6–8 min, 1 worker |
 
 ### Connection budget
 
-The simulator opens at most ~15 connections by default
-(8 TPS pool + 2 slow + 2 lock holder/waiter + 2 idle).
+The simulator opens at most ~20 connections by default
+(8 TPS pool + 3 slow + 4 lock holder/waiter + 3 idle).
 Adjust `--tps-workers` if your dev Postgres has a lower `max_connections`.
 
 ## Simulating incident scenarios

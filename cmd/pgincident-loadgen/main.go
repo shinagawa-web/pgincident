@@ -29,20 +29,17 @@ func getenv(key, fallback string) string {
 }
 
 func main() {
-	dsn          := flag.String("dsn", getenv("DATABASE_URL", defaultDSN), "PostgreSQL DSN")
-	noTPS        := flag.Bool("no-tps", false, "disable background TPS workers")
-	noSlow       := flag.Bool("no-slow", false, "disable slow-query workers")
-	noLocks      := flag.Bool("no-locks", false, "disable lock contention workers")
-	noIdle       := flag.Bool("no-idle", false, "disable idle-in-transaction workers")
-	tpsWorkers   := flag.Int("tps-workers", 8, "number of background TPS workers")
-	slowInterval := flag.Duration("slow-interval", 6*time.Second, "delay between slow queries per worker")
-	idleDuration := flag.Duration("idle-duration", 45*time.Second, "how long each idle-in-transaction session lingers")
+	dsn        := flag.String("dsn", getenv("DATABASE_URL", defaultDSN), "PostgreSQL DSN")
+	noTPS      := flag.Bool("no-tps", false, "disable background TPS workers")
+	noSlow     := flag.Bool("no-slow", false, "disable slow-query workers")
+	noLocks    := flag.Bool("no-locks", false, "disable lock contention workers")
+	noIdle     := flag.Bool("no-idle", false, "disable idle-in-transaction workers")
+	tpsWorkers := flag.Int("tps-workers", 8, "number of background TPS workers")
 	flag.Parse()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle Ctrl-C: cancel context, then wait for clean shutdown.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -73,34 +70,54 @@ func main() {
 
 	if !*noSlow {
 		enabled = append(enabled, "slow")
+		// Short: 2 workers, 6–11 s queries cycling quickly.
 		for i := 0; i < 2; i++ {
 			wg.Add(1)
-			go func(workerIdx int) {
+			go func(idx int) {
 				defer wg.Done()
-				runSlowWorker(ctx, *dsn, *slowInterval, workerIdx)
+				runSlowWorker(ctx, *dsn, 6, 11, 10*time.Second, idx)
 			}(i)
 		}
+		// Long: 1 worker, 5–8 min queries that stay visible for minutes.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runSlowWorker(ctx, *dsn, 300, 480, 30*time.Second, 0)
+		}()
 	}
 
 	if !*noLocks {
 		enabled = append(enabled, "locks")
+		// Short: row 1, 8–18 s hold, cycles quickly.
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			runLockWorker(ctx, *dsn)
+			runLockWorker(ctx, *dsn, 1, 8*time.Second, 18*time.Second, 5*time.Second)
+		}()
+		// Long: row 2, 5–8 min hold, stays blocked for minutes.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runLockWorker(ctx, *dsn, 2, 300*time.Second, 480*time.Second, 30*time.Second)
 		}()
 	}
 
 	if !*noIdle {
 		enabled = append(enabled, "idle")
-		// Two idle workers so one is always past the 30s threshold.
+		// Short: 2 workers staggered by 22.5 s so one is always past the 30 s threshold.
 		for i := 0; i < 2; i++ {
 			wg.Add(1)
 			go func(initialDelay time.Duration) {
 				defer wg.Done()
-				runIdleWorker(ctx, *dsn, *idleDuration, initialDelay)
-			}(time.Duration(i) * (*idleDuration / 2))
+				runIdleWorker(ctx, *dsn, 45*time.Second, initialDelay)
+			}(time.Duration(i) * 22 * time.Second)
 		}
+		// Long: 1 worker sitting idle for 6–8 min.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runIdleWorker(ctx, *dsn, time.Duration(360+rand.IntN(120))*time.Second, 0)
+		}()
 	}
 
 	if len(enabled) == 0 {
@@ -138,9 +155,9 @@ func runTPSWorker(ctx context.Context, pool *pgxpool.Pool) {
 	}
 }
 
-// runSlowWorker periodically runs a multi-second analytical query (> 5 s threshold).
-// workerIdx staggers start so the two workers don't fire at the same time.
-func runSlowWorker(ctx context.Context, dsn string, interval time.Duration, workerIdx int) {
+// runSlowWorker periodically runs analytical queries sleeping for [minSecs, maxSecs].
+// gap is the pause between consecutive queries. workerIdx staggers the start.
+func runSlowWorker(ctx context.Context, dsn string, minSecs, maxSecs int, gap time.Duration, workerIdx int) {
 	conn, err := pgx.Connect(ctx, dsn)
 	if err != nil {
 		log.Printf("slow worker connect: %v", err)
@@ -148,15 +165,11 @@ func runSlowWorker(ctx context.Context, dsn string, interval time.Duration, work
 	}
 	defer conn.Close(context.Background()) //nolint:errcheck
 
-	// Stagger start to avoid simultaneous slow queries from both workers.
-	select {
-	case <-ctx.Done():
-		return
-	case <-time.After(time.Duration(workerIdx) * interval / 2):
-	}
+	// Stagger workers to avoid simultaneous queries.
+	sleep(ctx, time.Duration(workerIdx)*gap/2)
 
 	for ctx.Err() == nil {
-		sleepSecs := 6 + rand.IntN(6) // 6–11 s, always above the 5 s threshold
+		sleepSecs := minSecs + rand.IntN(maxSecs-minSecs+1)
 		idA := rand.Int64N(accountsCount) + 1
 		idB := rand.Int64N(accountsCount) + 1
 		_, err := conn.Exec(ctx,
@@ -170,31 +183,26 @@ func runSlowWorker(ctx context.Context, dsn string, interval time.Duration, work
 			sleepSecs, idA, idB,
 		)
 		if err != nil && ctx.Err() == nil {
-			log.Printf("slow worker query: %v", err)
+			log.Printf("slow worker (range %d-%ds): %v", minSecs, maxSecs, err)
 		}
-
-		// Jitter between runs so long-running rows rotate visibly.
-		jitter := time.Duration(rand.Int64N(int64(interval)))
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(jitter):
-		}
+		sleep(ctx, gap)
 	}
 }
 
-// runLockWorker loops lock-contention cycles: holder acquires a row lock, waiter
-// blocks, then holder releases so the pair appears and resolves on the dashboard.
-func runLockWorker(ctx context.Context, dsn string) {
+// runLockWorker loops lock-contention cycles on the given row.
+// holdMin/holdMax control how long the holder keeps the lock.
+// pause is the gap between cycles.
+func runLockWorker(ctx context.Context, dsn string, rowID int, holdMin, holdMax, pause time.Duration) {
 	for ctx.Err() == nil {
-		if err := lockCycle(ctx, dsn); err != nil && ctx.Err() == nil {
-			log.Printf("lock worker: %v", err)
+		if err := lockCycle(ctx, dsn, rowID, holdMin, holdMax); err != nil && ctx.Err() == nil {
+			log.Printf("lock worker (row %d): %v", rowID, err)
 			sleep(ctx, time.Second)
 		}
+		sleep(ctx, pause)
 	}
 }
 
-func lockCycle(ctx context.Context, dsn string) error {
+func lockCycle(ctx context.Context, dsn string, rowID int, holdMin, holdMax time.Duration) error {
 	holder, err := pgx.Connect(ctx, dsn)
 	if err != nil {
 		return fmt.Errorf("holder connect: %w", err)
@@ -216,47 +224,38 @@ func lockCycle(ctx context.Context, dsn string) error {
 	if _, err := holder.Exec(ctx, "BEGIN"); err != nil {
 		return fmt.Errorf("holder BEGIN: %w", err)
 	}
-	if _, err := holder.Exec(ctx, "SELECT id FROM loadgen_lock_rows WHERE id = 1 FOR UPDATE"); err != nil {
-		return fmt.Errorf("holder lock: %w", err)
+	if _, err := holder.Exec(ctx, "SELECT id FROM loadgen_lock_rows WHERE id = $1 FOR UPDATE", rowID); err != nil {
+		return fmt.Errorf("holder lock row %d: %w", rowID, err)
 	}
 
-	// Waiter tries to acquire the same row — will block until holder releases.
+	// Waiter tries to acquire the same row — blocks until holder releases.
 	waiterErrCh := make(chan error, 1)
 	go func() {
 		if _, err := waiter.Exec(ctx, "BEGIN"); err != nil {
 			waiterErrCh <- err
 			return
 		}
-		// This Exec blocks until holder commits/rolls back.
-		_, err := waiter.Exec(ctx, "SELECT id FROM loadgen_lock_rows WHERE id = 1 FOR UPDATE")
+		_, err := waiter.Exec(ctx, "SELECT id FROM loadgen_lock_rows WHERE id = $1 FOR UPDATE", rowID)
 		if err == nil {
 			waiter.Exec(context.Background(), "COMMIT") //nolint:errcheck
 		}
 		waiterErrCh <- err
 	}()
 
-	// Hold the lock for 8–18 s so the dashboard has time to display the pair.
-	holdFor := time.Duration(8+rand.IntN(10)) * time.Second
+	holdFor := holdMin + time.Duration(rand.Int64N(int64(holdMax-holdMin)))
 	sleep(ctx, holdFor)
 
-	// Release the lock so the waiter can proceed.
-	// Must wait for the goroutine before returning: pgx.Conn is not goroutine-safe,
-	// and the defer ROLLBACK would race with the goroutine's in-flight Exec.
+	// Release. Must drain waiterErrCh before returning: pgx.Conn is not
+	// goroutine-safe, and the defer ROLLBACK would race with the goroutine's Exec.
 	holder.Exec(context.Background(), "ROLLBACK") //nolint:errcheck
-
-	// pgx propagates ctx cancellation into the blocked Exec, so this always resolves.
 	if err := <-waiterErrCh; err != nil && ctx.Err() == nil {
-		log.Printf("lock waiter: %v", err)
+		log.Printf("lock waiter (row %d): %v", rowID, err)
 	}
-
-	// Pause between cycles.
-	sleep(ctx, time.Duration(3+rand.IntN(5))*time.Second)
 	return nil
 }
 
 // runIdleWorker opens a transaction, runs a query, then sits idle-in-transaction
-// for idleDuration before committing/rolling back and repeating.
-// initialDelay staggers the two idle workers so one is always past the 30 s threshold.
+// for idleDuration before cycling. initialDelay staggers workers.
 func runIdleWorker(ctx context.Context, dsn string, idleDuration, initialDelay time.Duration) {
 	sleep(ctx, initialDelay)
 	for ctx.Err() == nil {
@@ -272,7 +271,6 @@ func idleCycle(ctx context.Context, dsn string, idleDuration time.Duration) erro
 	if err != nil {
 		return fmt.Errorf("idle connect: %w", err)
 	}
-	// Use Background for cleanup so ROLLBACK is always sent even after ctx cancel.
 	defer conn.Close(context.Background()) //nolint:errcheck
 
 	if _, err := conn.Exec(ctx, "BEGIN"); err != nil {
@@ -284,7 +282,7 @@ func idleCycle(ctx context.Context, dsn string, idleDuration time.Duration) erro
 		return err
 	}
 
-	// Sit idle in transaction — the TUI threshold is 30 s.
+	// Sit idle in transaction — TUI threshold is 30 s.
 	select {
 	case <-ctx.Done():
 		conn.Exec(context.Background(), "ROLLBACK") //nolint:errcheck
