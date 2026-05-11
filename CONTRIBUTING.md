@@ -54,47 +54,7 @@ Within roughly 10 seconds all four dashboard sections should show non-empty, tim
 data. The "Idle in transaction" section takes ~30 s to populate (that is the detection
 threshold).
 
-> **First run on an existing container:** `make dev-load` runs `dev/loadgen_setup.sql`
-> automatically, which creates and seeds the `loadgen_accounts` and `loadgen_lock_rows`
-> tables. No manual steps are needed. If you started fresh with `make dev-up` the tables
-> are already present via `dev/init.sql`.
-
-### Toggling subsystems
-
-All four subsystems are enabled by default. Disable individual ones via `LOADGEN_FLAGS`:
-
-```bash
-# Only background TPS (no slow queries, no locks, no idle sessions)
-make dev-load LOADGEN_FLAGS="--no-slow --no-locks --no-idle"
-
-# Only lock contention
-make dev-load LOADGEN_FLAGS="--no-tps --no-slow --no-idle"
-```
-
-Available flags for `go run ./cmd/pgincident-loadgen`:
-
-| Flag | Default | Description |
-|---|---|---|
-| `--no-tps` | false | Disable background TPS workers |
-| `--no-slow` | false | Disable slow-query workers |
-| `--no-locks` | false | Disable lock contention workers |
-| `--no-idle` | false | Disable idle-in-transaction workers |
-| `--tps-workers N` | 8 | Number of background TPS connections |
-| `--dsn URL` | env `DATABASE_URL` | PostgreSQL DSN |
-
-Each subsystem runs **short-lived and long-lived sessions concurrently** from startup:
-
-| Subsystem | Short | Long |
-|---|---|---|
-| Slow queries | 6–11 s, cycles quickly | 5–8 min, stays visible for minutes |
-| Locks | row 1, 8–18 s hold | row 2, 5–8 min hold |
-| Idle in transaction | 45 s, 2 staggered workers | 6–8 min, 1 worker |
-
-### Connection budget
-
-The simulator opens at most ~20 connections by default
-(8 TPS pool + 3 slow + 4 lock holder/waiter + 3 idle).
-Adjust `--tps-workers` if your dev Postgres has a lower `max_connections`.
+For how the simulator works internally, see [docs/dev-load.md](docs/dev-load.md).
 
 ## Simulating incident scenarios
 
