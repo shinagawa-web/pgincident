@@ -68,11 +68,11 @@ Idle in transaction (> 30s)                                            [2 idle]
 - System stats (CPU/IO/mem) — pgcenter does this; we focus on Postgres internals
 - Multi-instance dashboard (one connection at a time)
 
-## 5. SQL Catalog
+## 4. SQL Catalog
 
 See `SQL_CATALOG.md` for the candidate SQL per metric, version notes, and verification status (✅ tested / ⚠️ untested / ❌ broken on PG X).
 
-## 6. Update Loop
+## 5. Update Loop
 
 - Default interval: 5 seconds. Adjustable with `+` / `-` (minimum 1s).
 - Poller runs in a background goroutine, sends `PollResult` to TUI via channel. TUI never blocks on DB.
@@ -85,7 +85,7 @@ All polled views (`pg_stat_activity`, `pg_locks`, `pg_stat_database`) read from 
 
 Note: `pg_stat_statements` (v0.2) can be heavier on systems with many unique queries. Consider polling it at a longer interval or making it opt-in.
 
-## 7. Error Handling
+## 6. Error Handling
 
 | Category | Example | UX |
 |---|---|---|
@@ -95,31 +95,31 @@ Note: `pg_stat_statements` (v0.2) can be heavier on systems with many unique que
 
 `pg_monitor` membership is checked at startup. If the user is not a member, the tool exits with an actionable message.
 
-## 8. Testing
+## 7. Testing
 
-- **Unit tests** (`internal/core/`, `internal/tui/`) — pure Go logic: formatters, poller math, TUI rendering (golden files + interaction tests with stub data). No DB required. 100% statement coverage enforced.
+- **Unit tests** (`internal/core/`, `internal/tui/`) — pure Go logic: formatters, poller math, TUI rendering (golden files + interaction tests with stub data). No DB required. 100% statement coverage enforced by the pre-push hook.
 - **Integration tests** (`internal/core/integration_test.go`) — real Postgres via `DATABASE_URL`.
 - **CI** — two GitHub Actions jobs:
   - *Unit tests*: `go test -race -coverprofile` on every push/PR; coverage uploaded to Codecov.
   - *Integration tests*: Postgres 16 service container; runs `TestIntegration*` suite.
 
-## 9. UX Details
+## 8. UX Details
 
-### 9.1 Three-level design (target architecture)
+### 8.1 Three-level design (target architecture)
 
 > v0.1 ships a single dashboard screen (Level 2 entry point). Level 1 overview shipped in v0.1.3; full Level 3 investigation planned for v0.3.
 
 - **Level 1 — Overview** *(shipped v0.1.3)* — Global DB health at a glance. Key metrics with status colors (normal / warning / critical). If something is red, drill into Level 2.
 - **Level 2 — Category view** — Per-category lists: Activity / Locks / I/O / Statements / Tables / Vacuum / Replication / Connections. *(v0.1 ships Activity, Locks, Idle in transaction)*
-- **Level 3 — Process view** (`Enter`, v0.3+) — Individual query and session investigation. Full SQL, wait events, lock chain, cancel/kill.
+- **Level 3 — Process view** (v0.3+) — Extends `Enter` into a full investigation: wait events, lock chain, cancel/kill. Currently `Enter` opens the query detail overlay (v0.1.2+).
 
-### 9.2 Layout constraints
+### 8.2 Layout constraints
 
 - **Minimum supported size**: 80 columns × 24 rows.
 - Below minimum: warning screen instead of broken layout.
 - Above minimum: each section gets roughly 1/3 of the body area.
 
-### 9.3 Key bindings
+### 8.3 Key bindings
 
 See [docs/usage.md](docs/usage.md) for the full key binding reference per screen.
 
@@ -140,7 +140,7 @@ Three key decisions behind this tool:
 2. **Incident-response framing** — not "show me everything", but "what's broken right now."
 3. **overview → category → process flow** — global health first, drill into the problem area, then individual session investigation.
 
-## 10. Roadmap
+## 9. Roadmap
 
 - [x] v0.1 — Incident dashboard
 - [x] v0.1.1 — Unit tests + integration tests + CI
