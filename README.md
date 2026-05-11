@@ -124,12 +124,13 @@ Note: `pg_stat_statements` (v0.2) can be heavier on systems with many unique que
 | Key | Action |
 |---|---|
 | `q` / `Ctrl-C` | Quit |
-| `?` | Help overlay |
+| `o` | Toggle overview / dashboard |
 | `Tab` | Next section |
 | `Shift-Tab` | Previous section |
 | `↑` / `↓` / `j` / `k` | Move cursor in active section |
-| `Enter` | Investigate mode for selected row (v0.3+) |
+| `Enter` | Query detail overlay (dashboard only) |
 | `+` / `-` | Increase / decrease refresh interval |
+| `?` | Help overlay |
 
 ## Why pgincident?
 
