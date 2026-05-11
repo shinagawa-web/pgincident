@@ -1,5 +1,10 @@
 # Contributing
 
+## Prerequisites
+
+- Go 1.22+
+- Docker (for local Postgres)
+
 ## Dev environment
 
 ```bash
@@ -35,6 +40,47 @@ Bypass with `git push --no-verify` if needed.
 | `make lint` | Run `go vet` |
 | `make tidy` | Run `go mod tidy` and verify no diff |
 | `make install-hooks` | Install the pre-push hook |
+
+## Architecture
+
+Three-layer separation:
+
+```
+pgincident/
+├── cmd/
+│   └── pgincident/
+│       └── main.go                # CLI entry, wires up core + tui
+├── internal/
+│   ├── core/                      # DB → Go structs (no formatting, no UI)
+│   │   ├── client.go              # pgx connection wrapper
+│   │   ├── activity.go            # pg_stat_activity → []Activity
+│   │   ├── locks.go               # pg_locks → []Lock
+│   │   ├── stats.go               # pg_stat_database → DBStats
+│   │   ├── poller.go              # background polling loop
+│   │   └── types.go               # Activity, Lock, DBStats, Snapshot
+│   ├── tui/                       # Bubble Tea Model/View/Update
+│   │   ├── app.go                 # root model
+│   │   ├── header.go
+│   │   ├── overview.go            # Level 1 overview screen
+│   │   ├── activity_view.go
+│   │   ├── locks_view.go
+│   │   ├── idle_view.go
+│   │   ├── section.go
+│   │   ├── style.go               # Lipgloss styles
+│   │   └── format.go              # duration / padding helpers
+│   └── version/
+│       └── version.go
+├── .github/workflows/
+├── Makefile
+├── go.mod / go.sum
+└── README.md
+```
+
+Boundary rules:
+
+- **`core` knows nothing about the TUI.** No lipgloss, no Bubble Tea types, no formatting. Returns plain Go structs and `time.Duration`.
+- **`tui` knows nothing about the SQL.** Receives structs from `core` and maps them to views.
+- **Only `tui` depends on `internal/version`.** Nothing else is shared.
 
 ## Simulating incident scenarios
 
