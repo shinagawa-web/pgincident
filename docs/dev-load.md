@@ -64,9 +64,9 @@ The waiter goroutine is always drained before `lockCycle` returns to prevent a d
 | Worker | Idle duration | Initial delay |
 |---|---|---|
 | Short × 2 | 45 s | 0 s and 22 s |
-| Long × 1 | 6–8 min | 0 s |
+| Long × 2 | 6–8 min | 0 s and ~3.5 min |
 
-The two short workers are staggered by 22 s (half of 45 s) so at least one is always past the 30 s detection threshold. The long worker provides a session that stays visible for minutes.
+The two short workers are staggered by 22 s (half of 45 s) so at least one is always past the 30 s detection threshold. The two long workers are staggered by ~3.5 min (half the average 7 min duration) so at least one long idle session is always visible, with an overlap window where two appear simultaneously.
 
 After each idle period the session randomly commits or rolls back, waits 2 s, then opens a new transaction and repeats.
 
@@ -86,8 +86,8 @@ After a clean shutdown, `pg_stat_activity` returns no `pgincident_dev` rows and 
 | Lock short (holder + waiter) | 2 |
 | Lock long (holder + waiter) | 2 |
 | Idle short | 2 |
-| Idle long | 1 |
-| **Total** | **~19** |
+| Idle long | 2 |
+| **Total** | **~20** |
 
 Postgres default `max_connections` is 100, so the simulator is well within budget. Reduce `--tps-workers` if your environment has a lower limit.
 

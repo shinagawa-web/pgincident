@@ -116,12 +116,15 @@ func main() {
 				runIdleWorker(ctx, *dsn, 45*time.Second, initialDelay)
 			}(time.Duration(i) * 22 * time.Second)
 		}
-		// Long: 1 worker sitting idle for 6–8 min.
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			runIdleWorker(ctx, *dsn, time.Duration(360+rand.IntN(120))*time.Second, 0)
-		}()
+		// Long: 2 workers staggered by ~3.5 min (half the average 7 min duration)
+		// so at least one is always visible, with an overlap window where 2 appear.
+		for i := 0; i < 2; i++ {
+			wg.Add(1)
+			go func(delay time.Duration) {
+				defer wg.Done()
+				runIdleWorker(ctx, *dsn, time.Duration(360+rand.IntN(120))*time.Second, delay)
+			}(time.Duration(i) * 210 * time.Second)
+		}
 	}
 
 	if len(enabled) == 0 {
