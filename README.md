@@ -99,11 +99,9 @@ Note: `pg_stat_statements` (v0.2) can be heavier on systems with many unique que
 
 - **Unit tests** (`internal/core/`, `internal/tui/`) — pure Go logic: formatters, poller math, TUI rendering (golden files + interaction tests with stub data). No DB required. 100% statement coverage enforced by the pre-push hook.
 - **Integration tests** (`internal/core/integration_test.go`) — real Postgres via `DATABASE_URL`.
-- **CI** — two GitHub Actions jobs:
+- **CI** — GitHub Actions jobs:
   - *Unit tests*: `go test -race -coverprofile` on every push/PR; coverage uploaded to Codecov.
-  - *Integration tests*: Postgres 16 service container; runs `TestIntegration*` suite.
-
-## 8. UX Details
+  - *Integration tests*: Postgres 14 / 15 / 16 / 17 matrix + LocalStack RDS (Postgres 17).
 
 ### 8.1 Three-level design (target architecture)
 
@@ -142,6 +140,7 @@ Three key decisions behind this tool:
 
 ## 9. Roadmap
 
+<<<<<<< Updated upstream
 - [x] v0.1 — Incident dashboard
 - [x] v0.1.1 — Unit tests + integration tests + CI
 - [x] v0.1.2 — Query detail overlay (full SQL on `Enter`)
@@ -159,6 +158,9 @@ Three key decisions behind this tool:
 - [ ] v0.9 — Built-in SSH tunnel (bastion host support via config)
 - [ ] v1.0 — Azure / Neon / Supabase support; stable release
 - [ ] v2.0 — Web UI mode (`pgincident serve`)
+=======
+See [issue #40](https://github.com/shinagawa-web/pgincident/issues/40) for the full roadmap.
+>>>>>>> Stashed changes
 
 ## Contributing
 
@@ -179,4 +181,49 @@ ALTER SYSTEM SET track_activity_query_size = 65536;
 SELECT pg_reload_conf(); -- not enough alone; a restart is required
 ```
 
+<<<<<<< Updated upstream
 For the local dev container, the `docker-compose.yml` already sets `track_activity_query_size=65536`. On managed databases (RDS, Cloud SQL), set the parameter in the parameter group and reboot the instance.
+=======
+Boundary rules:
+
+- **`core` knows nothing about the TUI.** No lipgloss, no Bubble Tea types, no formatting. Returns plain Go structs and `time.Duration`.
+- **`tui` knows nothing about the SQL.** Receives structs from `core` and maps them to views.
+- **Only `tui` depends on `internal/version`.** Nothing else is shared.
+
+### Prerequisites
+
+- Go 1.22+
+- Docker (for local Postgres)
+
+### Start the dev environment
+
+```bash
+make dev-up   # starts Postgres 16 with pgincident_dev / pg_monitor
+make run      # builds and launches the TUI
+make dev-down # stop and remove the container
+```
+
+Default DSN (used when `DATABASE_URL` is not set):
+```
+postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres
+```
+
+### PostgreSQL configuration
+
+pgincident reads the full query text from `pg_stat_activity.query`. PostgreSQL truncates this column at `track_activity_query_size` bytes (default: **1024**). With the default, long queries are cut off before they overflow the detail overlay, making the scroll feature useless in practice.
+
+Raise the limit to get the most out of the query detail overlay:
+
+```sql
+-- Check the current value
+SHOW track_activity_query_size;
+
+-- Apply permanently (requires superuser + server restart)
+ALTER SYSTEM SET track_activity_query_size = 65536;
+SELECT pg_reload_conf(); -- not enough alone; a restart is required
+```
+
+For the local dev container, the `docker-compose.yml` already sets `track_activity_query_size=65536`. On managed databases (RDS, Cloud SQL), set the parameter in the parameter group and reboot the instance.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to simulate incident scenarios locally.
+>>>>>>> Stashed changes

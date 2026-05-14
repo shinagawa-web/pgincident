@@ -32,12 +32,16 @@ jobs:
           fail_ci_if_error: false
 
   integration:
-    name: Integration tests
+    name: Integration tests (Postgres ${{ matrix.pg }})
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        pg: [14, 15, 16, 17]
 
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.pg }}
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -67,3 +71,58 @@ jobs:
         run: go test -race -v -timeout 2m -run Integration ./internal/core/...
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+
+  integration-rds:
+    name: Integration tests (LocalStack RDS)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Start LocalStack
+        uses: LocalStack/setup-localstack@v0.2.3
+        with:
+          image-tag: latest
+
+      - name: Create RDS instance
+        run: |
+          awslocal rds create-db-instance \
+            --db-instance-identifier pgincident-test \
+            --db-instance-class db.t3.micro \
+            --engine postgres \
+            --engine-version 17 \
+            --master-username postgres \
+            --master-user-password postgres \
+            --db-name postgres \
+            --no-multi-az \
+            --no-publicly-accessible
+          awslocal rds wait db-instance-available --db-instance-identifier pgincident-test
+
+      - name: Get RDS endpoint
+        id: rds
+        run: |
+          ENDPOINT=$(awslocal rds describe-db-instances \
+            --db-instance-identifier pgincident-test \
+            --query 'DBInstances[0].Endpoint.Address' \
+            --output text)
+          PORT=$(awslocal rds describe-db-instances \
+            --db-instance-identifier pgincident-test \
+            --query 'DBInstances[0].Endpoint.Port' \
+            --output text)
+          echo "host=$ENDPOINT" >> "$GITHUB_OUTPUT"
+          echo "port=$PORT" >> "$GITHUB_OUTPUT"
+
+      - name: Grant pg_monitor
+        run: psql -h ${{ steps.rds.outputs.host }} -p ${{ steps.rds.outputs.port }} -U postgres -c "GRANT pg_monitor TO postgres"
+        env:
+          PGPASSWORD: postgres
+
+      - name: Run integration tests
+        run: go test -race -v -timeout 2m -run Integration ./internal/core/...
+        env:
+          DATABASE_URL: postgres://postgres:postgres@${{ steps.rds.outputs.host }}:${{ steps.rds.outputs.port }}/postgres
