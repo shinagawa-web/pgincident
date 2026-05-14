@@ -100,7 +100,7 @@ Note: `pg_stat_statements` (v0.2) can be heavier on systems with many unique que
 - **Unit tests** (`internal/core/`, `internal/tui/`) — pure Go logic: formatters, poller math, TUI rendering (golden files + interaction tests with stub data). No DB required. 100% statement coverage enforced by the pre-push hook.
 - **Integration tests** (`internal/core/integration_test.go`) — real Postgres via `DATABASE_URL`.
 - **CI** — GitHub Actions jobs:
-  - *Unit tests*: `go test -race -coverprofile` on every push/PR; coverage uploaded to Codecov.
+  - *Unit tests*: `go test -race -coverprofile` on every push/PR — covers core logic and TUI rendering (golden files + interaction tests); coverage uploaded to Codecov.
   - *Integration tests*: Postgres 14 / 15 / 16 / 17 matrix + LocalStack RDS (Postgres 17).
 
 ### 8.1 Three-level design (target architecture)
