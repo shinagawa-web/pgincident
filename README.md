@@ -103,6 +103,8 @@ Note: `pg_stat_statements` (v0.2) can be heavier on systems with many unique que
   - *Unit tests*: `go test -race -coverprofile` on every push/PR — covers core logic and TUI rendering (golden files + interaction tests); coverage uploaded to Codecov.
   - *Integration tests*: Postgres 14 / 15 / 16 / 17 matrix.
 
+## 8. UX Details
+
 ### 8.1 Three-level design (target architecture)
 
 > v0.1 ships a single dashboard screen (Level 2 entry point). Level 1 overview shipped in v0.1.3; full Level 3 investigation planned for v0.3.

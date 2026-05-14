@@ -36,6 +36,7 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
         pg: [14, 15, 16, 17]
 
@@ -61,6 +62,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
 
       - name: Grant pg_monitor
         run: psql -h localhost -U postgres -c "GRANT pg_monitor TO postgres"
