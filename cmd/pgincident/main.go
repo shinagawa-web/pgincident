@@ -4,61 +4,24 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/shinagawa-web/pgincident/internal/cli"
 	"github.com/shinagawa-web/pgincident/internal/config"
 	"github.com/shinagawa-web/pgincident/internal/core"
 	"github.com/shinagawa-web/pgincident/internal/tui"
 	"github.com/shinagawa-web/pgincident/internal/version"
 )
 
-const helpText = `Usage: pgincident [options]
-
-Options:
-  --config PATH   Config file path (default: ~/.pgincident.toml)
-  -v, --version   Print version and exit
-  -h, --help      Show this help
-`
-
-// errHelp and errVersion signal clean exits without triggering the error path.
-var errHelp = fmt.Errorf("help")
-var errVersion = fmt.Errorf("version")
-
-// parseFlags returns the config path extracted from args, or errHelp/errVersion
-// for -h/--help and -v/--version respectively.
-func parseFlags(args []string) (cfgPath string, err error) {
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		switch {
-		case arg == "--config":
-			i++
-			if i >= len(args) {
-				return "", fmt.Errorf("--config requires an argument")
-			}
-			cfgPath = args[i]
-		case strings.HasPrefix(arg, "--config="):
-			cfgPath = strings.TrimPrefix(arg, "--config=")
-		case arg == "-v" || arg == "--version":
-			return "", errVersion
-		case arg == "-h" || arg == "--help":
-			return "", errHelp
-		default:
-			return "", fmt.Errorf("unknown flag: %s\n\n%s", arg, helpText)
-		}
-	}
-	return cfgPath, nil
-}
-
 func main() {
-	cfgPath, err := parseFlags(os.Args[1:])
-	if err == errVersion {
+	cfgPath, err := cli.ParseFlags(os.Args[1:])
+	if err == cli.ErrVersion {
 		fmt.Printf("pgincident v%s\n", version.Version)
 		os.Exit(0)
 	}
-	if err == errHelp {
-		fmt.Print(helpText)
+	if err == cli.ErrHelp {
+		fmt.Print(cli.HelpText)
 		os.Exit(0)
 	}
 	if err != nil {
