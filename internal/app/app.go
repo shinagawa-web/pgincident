@@ -11,6 +11,21 @@ import (
 	"github.com/shinagawa-web/pgincident/internal/tui"
 )
 
+type dbClient interface {
+	core.Querier
+	Close(ctx context.Context)
+}
+
+var connectFn func(ctx context.Context, dsn string) (dbClient, error) = func(ctx context.Context, dsn string) (dbClient, error) {
+	return core.Connect(ctx, dsn)
+}
+
+var runFn = func(m tea.Model) error {
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	_, err := p.Run()
+	return err
+}
+
 func Run(cfgPath string) error {
 	if cfgPath == "" {
 		cfgPath = config.DefaultPath()
@@ -27,7 +42,7 @@ func Run(cfgPath string) error {
 
 	ctx := context.Background()
 
-	client, err := core.Connect(ctx, cfg.DSN)
+	client, err := connectFn(ctx, cfg.DSN)
 	if err != nil {
 		return err
 	}
@@ -37,7 +52,5 @@ func Run(cfgPath string) error {
 	poller.LongRunningThreshold = cfg.Thresholds.LongRunning.TimeDuration()
 	poller.IdleInTxThreshold = cfg.Thresholds.IdleInTx.TimeDuration()
 
-	p := tea.NewProgram(tui.New(poller), tea.WithAltScreen())
-	_, err = p.Run()
-	return err
+	return runFn(tui.New(poller))
 }
