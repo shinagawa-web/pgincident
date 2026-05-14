@@ -32,12 +32,17 @@ jobs:
           fail_ci_if_error: false
 
   integration:
-    name: Integration tests
+    name: Integration tests (Postgres ${{ matrix.pg }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: [14, 15, 16, 17]
 
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.pg }}
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -58,6 +63,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
       - name: Grant pg_monitor
         run: psql -h localhost -U postgres -c "GRANT pg_monitor TO postgres"
         env:
@@ -67,3 +75,4 @@ jobs:
         run: go test -race -v -timeout 2m -run Integration ./internal/core/...
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+

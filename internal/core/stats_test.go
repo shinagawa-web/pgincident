@@ -18,20 +18,32 @@ func newQueryRowConn(row pgx.Row) *mockConn {
 // --- Stats ---
 
 func TestStats(t *testing.T) {
-	row := &mockPgxRow{
-		scanFn: func(dest ...any) error {
-			*dest[0].(*int) = 10
-			*dest[1].(*int) = 100
-			*dest[2].(*int64) = 5000
-			*dest[3].(*float64) = 0.99
-			*dest[4].(*int64) = 3
-			*dest[5].(*bool) = true
-			*dest[6].(*float64) = 12.4
-			*dest[7].(*int) = 2
-			return nil
+	call := 0
+	conn := &mockConn{
+		queryRowFn: func(_ context.Context, _ string, _ ...any) pgx.Row {
+			call++
+			if call == 1 {
+				return &mockPgxRow{scanFn: func(dest ...any) error {
+					*dest[0].(*int) = 160001 // PG16
+					return nil
+				}}
+			}
+			return &mockPgxRow{
+				scanFn: func(dest ...any) error {
+					*dest[0].(*int) = 10
+					*dest[1].(*int) = 100
+					*dest[2].(*int64) = 5000
+					*dest[3].(*float64) = 0.99
+					*dest[4].(*int64) = 3
+					*dest[5].(*bool) = true
+					*dest[6].(*float64) = 12.4
+					*dest[7].(*int) = 2
+					return nil
+				},
+			}
 		},
 	}
-	c := &Client{conn: newQueryRowConn(row)}
+	c := &Client{conn: conn}
 	s, err := c.Stats(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -62,11 +74,70 @@ func TestStats(t *testing.T) {
 	}
 }
 
-func TestStatsError(t *testing.T) {
-	row := &mockPgxRow{
-		scanFn: func(_ ...any) error { return errors.New("db error") },
+func TestStatsPG17(t *testing.T) {
+	call := 0
+	conn := &mockConn{
+		queryRowFn: func(_ context.Context, _ string, _ ...any) pgx.Row {
+			call++
+			if call == 1 {
+				return &mockPgxRow{scanFn: func(dest ...any) error {
+					*dest[0].(*int) = 170000 // PG17
+					return nil
+				}}
+			}
+			return &mockPgxRow{
+				scanFn: func(dest ...any) error {
+					*dest[0].(*int) = 5
+					*dest[1].(*int) = 200
+					*dest[2].(*int64) = 1000
+					*dest[3].(*float64) = 0.95
+					*dest[4].(*int64) = 1
+					*dest[5].(*bool) = false
+					*dest[6].(*float64) = 0
+					*dest[7].(*int) = 0
+					return nil
+				},
+			}
+		},
 	}
-	c := &Client{conn: newQueryRowConn(row)}
+	c := &Client{conn: conn}
+	s, err := c.Stats(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.ConnectionsActive != 5 {
+		t.Errorf("ConnectionsActive = %d, want 5", s.ConnectionsActive)
+	}
+}
+
+func TestStatsVersionError(t *testing.T) {
+	conn := &mockConn{
+		queryRowFn: func(_ context.Context, _ string, _ ...any) pgx.Row {
+			return &mockPgxRow{scanFn: func(_ ...any) error { return errors.New("version error") }}
+		},
+	}
+	c := &Client{conn: conn}
+	_, err := c.Stats(context.Background())
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+}
+
+func TestStatsError(t *testing.T) {
+	call := 0
+	conn := &mockConn{
+		queryRowFn: func(_ context.Context, _ string, _ ...any) pgx.Row {
+			call++
+			if call == 1 {
+				return &mockPgxRow{scanFn: func(dest ...any) error {
+					*dest[0].(*int) = 160001
+					return nil
+				}}
+			}
+			return &mockPgxRow{scanFn: func(_ ...any) error { return errors.New("db error") }}
+		},
+	}
+	c := &Client{conn: conn}
 	_, err := c.Stats(context.Background())
 	if err == nil {
 		t.Error("expected error, got nil")

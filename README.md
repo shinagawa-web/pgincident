@@ -99,9 +99,9 @@ Note: `pg_stat_statements` (v0.2) can be heavier on systems with many unique que
 
 - **Unit tests** (`internal/core/`, `internal/tui/`) — pure Go logic: formatters, poller math, TUI rendering (golden files + interaction tests with stub data). No DB required. 100% statement coverage enforced by the pre-push hook.
 - **Integration tests** (`internal/core/integration_test.go`) — real Postgres via `DATABASE_URL`.
-- **CI** — two GitHub Actions jobs:
-  - *Unit tests*: `go test -race -coverprofile` on every push/PR; coverage uploaded to Codecov.
-  - *Integration tests*: Postgres 16 service container; runs `TestIntegration*` suite.
+- **CI** — GitHub Actions jobs:
+  - *Unit tests*: `go test -race -coverprofile` on every push/PR — covers core logic and TUI rendering (golden files + interaction tests); coverage uploaded to Codecov.
+  - *Integration tests*: Postgres 14 / 15 / 16 / 17 matrix.
 
 ## 8. UX Details
 
@@ -142,23 +142,7 @@ Three key decisions behind this tool:
 
 ## 9. Roadmap
 
-- [x] v0.1 — Incident dashboard
-- [x] v0.1.1 — Unit tests + integration tests + CI
-- [x] v0.1.2 — Query detail overlay (full SQL on `Enter`)
-- [x] v0.1.3 — Level 1 overview screen — global health indicators with status colors (connections, TPS, cache hit, checkpoint, replication lag, autovacuum)
-- [ ] v0.2 — `pg_stat_statements` integration (slow query history); RDS verification
-- [ ] v0.2.1 — Config file (`~/.pgincident.yml`) — slow query / idle-in-transaction thresholds, default DSN, refresh interval
-- [ ] v0.2.2 — Connection presets in config; in-TUI connection switching
-- [ ] v0.3 — Investigate mode — index health, bloat, wait events, seq scan / dead tuple ratio, checkpoint / bgwriter stats, WAL stats (via `Enter`); cancel (`c`) / kill (`K`) selected session (`pg_signal_backend` required)
-- [ ] v0.4 — Replication monitoring, log tailing
-- [ ] v0.5 — Snapshot recording + replay (local SQLite)
-- [ ] v0.5.1 — PgBouncer stats integration
-- [ ] v0.6 — Autovacuum / wraparound danger detection
-- [ ] v0.7 — Post-mortem auto-generation (Markdown export)
-- [ ] v0.8 — Multi-instance support — writer/replica simultaneous view (tab switching or fleet view TBD)
-- [ ] v0.9 — Built-in SSH tunnel (bastion host support via config)
-- [ ] v1.0 — Azure / Neon / Supabase support; stable release
-- [ ] v2.0 — Web UI mode (`pgincident serve`)
+See [issue #40](https://github.com/shinagawa-web/pgincident/issues/40) for the full roadmap.
 
 ## Contributing
 
