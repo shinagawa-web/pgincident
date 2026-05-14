@@ -101,7 +101,7 @@ Note: `pg_stat_statements` (v0.2) can be heavier on systems with many unique que
 - **Integration tests** (`internal/core/integration_test.go`) — real Postgres via `DATABASE_URL`.
 - **CI** — GitHub Actions jobs:
   - *Unit tests*: `go test -race -coverprofile` on every push/PR — covers core logic and TUI rendering (golden files + interaction tests); coverage uploaded to Codecov.
-  - *Integration tests*: Postgres 14 / 15 / 16 / 17 matrix + LocalStack RDS (Postgres 17).
+  - *Integration tests*: Postgres 14 / 15 / 16 / 17 matrix.
 
 ### 8.1 Three-level design (target architecture)
 
