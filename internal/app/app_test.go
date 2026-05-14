@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -104,5 +105,65 @@ func TestRunEmptyCfgPath(t *testing.T) {
 	err := Run("")
 	if err == nil {
 		t.Error("expected error with no config file at default path")
+	}
+}
+
+func TestMainVersion(t *testing.T) {
+	var out bytes.Buffer
+	code := Main([]string{"--version"}, "1.2.3", &out, &bytes.Buffer{})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "1.2.3") {
+		t.Errorf("stdout = %q, want version string", out.String())
+	}
+}
+
+func TestMainHelp(t *testing.T) {
+	var out bytes.Buffer
+	code := Main([]string{"--help"}, "", &out, &bytes.Buffer{})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "Usage:") {
+		t.Errorf("stdout = %q, want help text", out.String())
+	}
+}
+
+func TestMainFlagError(t *testing.T) {
+	var errBuf bytes.Buffer
+	code := Main([]string{"--unknown"}, "", &bytes.Buffer{}, &errBuf)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errBuf.String(), "error:") {
+		t.Errorf("stderr = %q, want error message", errBuf.String())
+	}
+}
+
+func TestMainRunError(t *testing.T) {
+	withMockConnect(t, func(_ context.Context, _ string) (dbClient, error) {
+		return nil, fmt.Errorf("db down")
+	})
+	f := writeTOML(t, `dsn = "postgres://u:p@localhost/db"`)
+	var errBuf bytes.Buffer
+	code := Main([]string{"--config", f}, "", &bytes.Buffer{}, &errBuf)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errBuf.String(), "error:") {
+		t.Errorf("stderr = %q, want error message", errBuf.String())
+	}
+}
+
+func TestMainSuccess(t *testing.T) {
+	withMockConnect(t, func(_ context.Context, _ string) (dbClient, error) {
+		return &mockClient{}, nil
+	})
+	withMockRun(t, func(_ tea.Model) error { return nil })
+	f := writeTOML(t, `dsn = "postgres://u:p@localhost/db"`)
+	code := Main([]string{"--config", f}, "", &bytes.Buffer{}, &bytes.Buffer{})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
 	}
 }

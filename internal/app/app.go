@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/shinagawa-web/pgincident/internal/cli"
 	"github.com/shinagawa-web/pgincident/internal/config"
 	"github.com/shinagawa-web/pgincident/internal/core"
 	"github.com/shinagawa-web/pgincident/internal/tui"
@@ -24,6 +26,27 @@ var runFn = func(m tea.Model) error {
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
+}
+
+func Main(args []string, versionStr string, stdout, stderr io.Writer) int {
+	cfgPath, err := cli.ParseFlags(args)
+	if err == cli.ErrVersion {
+		fmt.Fprintf(stdout, "pgincident v%s\n", versionStr)
+		return 0
+	}
+	if err == cli.ErrHelp {
+		fmt.Fprint(stdout, cli.HelpText)
+		return 0
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	if err := Run(cfgPath); err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func Run(cfgPath string) error {
