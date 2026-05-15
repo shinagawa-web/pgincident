@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/shinagawa-web/pgincident/internal/core"
 )
@@ -15,14 +16,14 @@ const (
 	cursorPrefix = 2 // "▸ " or "  "
 )
 
-func renderActivitySection(activities []core.Activity, cursor int, active bool, maxRows, width int) string {
+func renderActivitySection(activities []core.Activity, cursor int, active bool, maxRows, width int, threshold time.Duration) string {
 	colQuery := width - cursorPrefix - colPID - colUser - colDuration - colState
 	if colQuery < 10 {
 		colQuery = 10
 	}
 
 	lines := []string{
-		sectionTitle("Long-running queries (> 5s)", fmt.Sprintf("[%d active]", len(activities)), active, width),
+		sectionTitle(fmt.Sprintf("Long-running queries (> %s)", threshold), fmt.Sprintf("[%d active]", len(activities)), active, width),
 		"  " + colHeaderStyle.Render(
 			padRight("PID", colPID)+
 				padRight("USER", colUser)+
