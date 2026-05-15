@@ -17,6 +17,9 @@ func (d *Duration) UnmarshalText(text []byte) error {
 	if err != nil {
 		return fmt.Errorf("invalid duration %q: %w", string(text), err)
 	}
+	if dd <= 0 {
+		return fmt.Errorf("duration %q must be positive", string(text))
+	}
 	*d = Duration(dd)
 	return nil
 }
@@ -38,27 +41,33 @@ type Config struct {
 	Thresholds Thresholds `toml:"thresholds"`
 }
 
+var userHomeDirFn = os.UserHomeDir
+
 // DefaultPath returns the default config file path (~/.pgincident.toml).
-func DefaultPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".pgincident.toml")
+func DefaultPath() (string, error) {
+	home, err := userHomeDirFn()
+	if err != nil {
+		return "", fmt.Errorf("cannot locate home directory: %w", err)
+	}
+	return filepath.Join(home, ".pgincident.toml"), nil
 }
 
 // ResolvePath returns cfgPath if non-empty. Otherwise it returns
 // .pgincident.toml in the current directory if the file exists, falling back
 // to DefaultPath.
-func ResolvePath(cfgPath string) string {
+func ResolvePath(cfgPath string) (string, error) {
 	if cfgPath != "" {
-		return cfgPath
+		return cfgPath, nil
 	}
 	if _, err := os.Stat(".pgincident.toml"); err == nil {
-		return ".pgincident.toml"
+		return ".pgincident.toml", nil
 	}
 	return DefaultPath()
 }
 
 // Load reads and parses the TOML config file at path.
 // Threshold fields not present in the file keep their default values (5s / 30s).
+// Unknown keys and non-positive threshold durations are rejected.
 func Load(path string) (*Config, error) {
 	cfg := &Config{
 		Thresholds: Thresholds{
@@ -66,8 +75,12 @@ func Load(path string) (*Config, error) {
 			IdleInTx:    Duration(30 * time.Second),
 		},
 	}
-	if _, err := toml.DecodeFile(path, cfg); err != nil {
+	md, err := toml.DecodeFile(path, cfg)
+	if err != nil {
 		return nil, fmt.Errorf("config: %w", err)
+	}
+	if keys := md.Undecoded(); len(keys) > 0 {
+		return nil, fmt.Errorf("config: unknown keys: %v", keys)
 	}
 	return cfg, nil
 }

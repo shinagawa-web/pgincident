@@ -8,7 +8,8 @@ import (
 const HelpText = `Usage: pgincident [options]
 
 Options:
-  --config PATH   Config file path (default: ~/.pgincident.toml)
+  --config PATH   Config file path (default: .pgincident.toml in current dir,
+                  then ~/.pgincident.toml)
   -v, --version   Print version and exit
   -h, --help      Show this help
 `

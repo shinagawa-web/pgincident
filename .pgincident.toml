@@ -1,5 +1,0 @@
-dsn = "postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres"
-
-[thresholds]
-long_running        = "5s"
-idle_in_transaction = "30s"

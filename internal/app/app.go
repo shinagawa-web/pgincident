@@ -28,9 +28,15 @@ func defaultRun(m tea.Model) error {
 	return err
 }
 
+func defaultNewPoller(client dbClient, interval time.Duration) *core.Poller {
+	return core.NewPoller(client, interval)
+}
+
 var (
-	connectFn func(ctx context.Context, dsn string) (dbClient, error) = defaultConnect
-	runFn                                                              = defaultRun
+	connectFn   func(ctx context.Context, dsn string) (dbClient, error) = defaultConnect
+	runFn       func(tea.Model) error                                    = defaultRun
+	newPollerFn func(dbClient, time.Duration) *core.Poller               = defaultNewPoller
+	resolvePathFn = config.ResolvePath
 )
 
 func Main(args []string, versionStr string, stdout, stderr io.Writer) int {
@@ -55,15 +61,18 @@ func Main(args []string, versionStr string, stdout, stderr io.Writer) int {
 }
 
 func Run(cfgPath string) error {
-	cfgPath = config.ResolvePath(cfgPath)
+	resolved, err := resolvePathFn(cfgPath)
+	if err != nil {
+		return err
+	}
 
-	cfg, err := config.Load(cfgPath)
+	cfg, err := config.Load(resolved)
 	if err != nil {
 		return err
 	}
 
 	if cfg.DSN == "" {
-		return fmt.Errorf("no DSN configured — set 'dsn' in %s", cfgPath)
+		return fmt.Errorf("no DSN configured — set 'dsn' in %s", resolved)
 	}
 
 	ctx := context.Background()
@@ -74,7 +83,7 @@ func Run(cfgPath string) error {
 	}
 	defer client.Close(ctx)
 
-	poller := core.NewPoller(client, 5*time.Second)
+	poller := newPollerFn(client, 5*time.Second)
 	poller.LongRunningThreshold = cfg.Thresholds.LongRunning.TimeDuration()
 	poller.IdleInTxThreshold = cfg.Thresholds.IdleInTx.TimeDuration()
 

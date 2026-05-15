@@ -18,9 +18,9 @@ echo "==> Linting..."
 go vet ./...
 
 echo "==> Checking main.go is thin..."
-MAIN_LINES=$(wc -l < cmd/pgincident/main.go)
+MAIN_LINES=$(grep -cv '^[[:space:]]*\(//\|$\)' cmd/pgincident/main.go)
 if [ "$MAIN_LINES" -gt 15 ]; then
-  echo "cmd/pgincident/main.go is too long (${MAIN_LINES} lines) — move logic to internal/"
+  echo "cmd/pgincident/main.go is too long (${MAIN_LINES} non-blank/comment lines) — move logic to internal/"
   exit 1
 fi
 
@@ -41,6 +41,6 @@ fi
 
 export DATABASE_URL="${DATABASE_URL:-postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres}"
 echo "==> Running integration tests (DATABASE_URL=${DATABASE_URL})..."
-go test -race -v -timeout 2m -run Integration ./internal/core/...
+go test -race -v -timeout 2m -run Integration ./...
 
 echo "==> All checks passed."

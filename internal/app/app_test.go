@@ -57,6 +57,30 @@ func withMockRun(t *testing.T, fn func(tea.Model) error) {
 	t.Cleanup(func() { runFn = orig })
 }
 
+func withMockNewPoller(t *testing.T, fn func(dbClient, time.Duration) *core.Poller) {
+	t.Helper()
+	orig := newPollerFn
+	newPollerFn = fn
+	t.Cleanup(func() { newPollerFn = orig })
+}
+
+func withMockResolvePath(t *testing.T, fn func(string) (string, error)) {
+	t.Helper()
+	orig := resolvePathFn
+	resolvePathFn = fn
+	t.Cleanup(func() { resolvePathFn = orig })
+}
+
+func TestRunResolvePathError(t *testing.T) {
+	withMockResolvePath(t, func(_ string) (string, error) {
+		return "", fmt.Errorf("no home directory")
+	})
+	err := Run("")
+	if err == nil || err.Error() != "no home directory" {
+		t.Errorf("err = %v, want no home directory error", err)
+	}
+}
+
 func TestRunConfigLoadError(t *testing.T) {
 	err := Run("/nonexistent/pgincident.toml")
 	if err == nil {
@@ -187,6 +211,34 @@ func TestMainSuccess(t *testing.T) {
 	code := Main([]string{"--config", f}, "", &bytes.Buffer{}, &bytes.Buffer{})
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
+	}
+}
+
+func TestRunThresholdPropagation(t *testing.T) {
+	var captured *core.Poller
+	withMockNewPoller(t, func(client dbClient, interval time.Duration) *core.Poller {
+		p := core.NewPoller(client, interval)
+		captured = p
+		return p
+	})
+	withMockConnect(t, func(_ context.Context, _ string) (dbClient, error) {
+		return &mockClient{}, nil
+	})
+	withMockRun(t, func(_ tea.Model) error { return nil })
+	f := writeTOML(t, `
+dsn = "postgres://u:p@localhost/db"
+[thresholds]
+long_running = "10s"
+idle_in_transaction = "2m"
+`)
+	if err := Run(f); err != nil {
+		t.Fatal(err)
+	}
+	if captured.LongRunningThreshold != 10*time.Second {
+		t.Errorf("LongRunningThreshold = %v, want 10s", captured.LongRunningThreshold)
+	}
+	if captured.IdleInTxThreshold != 2*time.Minute {
+		t.Errorf("IdleInTxThreshold = %v, want 2m", captured.IdleInTxThreshold)
 	}
 }
 

@@ -68,6 +68,42 @@ long_running = "bad"
 	}
 }
 
+func TestLoadNegativeDuration(t *testing.T) {
+	f := writeTOML(t, `
+dsn = "postgres://u:p@localhost/db"
+[thresholds]
+long_running = "-5s"
+`)
+	_, err := config.Load(f)
+	if err == nil {
+		t.Error("expected error for negative duration, got nil")
+	}
+}
+
+func TestLoadZeroDuration(t *testing.T) {
+	f := writeTOML(t, `
+dsn = "postgres://u:p@localhost/db"
+[thresholds]
+long_running = "0s"
+`)
+	_, err := config.Load(f)
+	if err == nil {
+		t.Error("expected error for zero duration, got nil")
+	}
+}
+
+func TestLoadUnknownKey(t *testing.T) {
+	f := writeTOML(t, `
+dsn = "postgres://u:p@localhost/db"
+[thresholds]
+idle_in_transcation = "30s"
+`)
+	_, err := config.Load(f)
+	if err == nil {
+		t.Error("expected error for unknown key, got nil")
+	}
+}
+
 func TestLoadMissingFile(t *testing.T) {
 	_, err := config.Load("/nonexistent/path/.pgincident.toml")
 	if err == nil {
@@ -86,8 +122,8 @@ func TestDurationTimeDuration(t *testing.T) {
 }
 
 func TestDefaultPath(t *testing.T) {
-	p := config.DefaultPath()
-	if p == "" {
+	p, err := config.DefaultPath()
+	if err != nil {
 		t.Skip("home directory not available")
 	}
 	if filepath.Base(p) != ".pgincident.toml" {
@@ -96,7 +132,10 @@ func TestDefaultPath(t *testing.T) {
 }
 
 func TestResolvePathExplicit(t *testing.T) {
-	got := config.ResolvePath("/explicit/path.toml")
+	got, err := config.ResolvePath("/explicit/path.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got != "/explicit/path.toml" {
 		t.Errorf("got %q, want /explicit/path.toml", got)
 	}
@@ -108,7 +147,11 @@ func TestResolvePathCurrentDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)
-	if got := config.ResolvePath(""); got != ".pgincident.toml" {
+	got, err := config.ResolvePath("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != ".pgincident.toml" {
 		t.Errorf("got %q, want .pgincident.toml", got)
 	}
 }
@@ -116,7 +159,10 @@ func TestResolvePathCurrentDir(t *testing.T) {
 func TestResolvePathFallbackHome(t *testing.T) {
 	t.Chdir(t.TempDir())
 	t.Setenv("HOME", t.TempDir())
-	got := config.ResolvePath("")
+	got, err := config.ResolvePath("")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got == ".pgincident.toml" {
 		t.Error("got relative path, want absolute home path")
 	}
