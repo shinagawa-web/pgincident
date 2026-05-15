@@ -28,6 +28,9 @@ func ParseFlags(args []string) (cfgPath string, err error) {
 			cfgPath = args[i]
 		case strings.HasPrefix(arg, "--config="):
 			cfgPath = strings.TrimPrefix(arg, "--config=")
+			if cfgPath == "" {
+				return "", fmt.Errorf("--config requires an argument")
+			}
 		case arg == "-v" || arg == "--version":
 			return "", ErrVersion
 		case arg == "-h" || arg == "--help":

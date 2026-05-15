@@ -33,6 +33,13 @@ func TestParseFlagsConfigMissingArg(t *testing.T) {
 	}
 }
 
+func TestParseFlagsConfigEqualsEmpty(t *testing.T) {
+	_, err := cli.ParseFlags([]string{"--config="})
+	if err == nil {
+		t.Error("expected error for --config= with no value, got nil")
+	}
+}
+
 func TestParseFlagsVersion(t *testing.T) {
 	_, err := cli.ParseFlags([]string{"-v"})
 	if err != cli.ErrVersion {

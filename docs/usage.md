@@ -1,14 +1,38 @@
 # Usage
 
-## Starting pgincident
+## Configuration
 
-Set `DATABASE_URL` and run the binary:
+pgincident reads `~/.pgincident.toml` on startup. Create the file before first use:
 
-```bash
-DATABASE_URL=postgres://user:pass@host:5432/dbname pgincident
+```toml
+dsn = "postgres://user:password@localhost:5432/mydb"
+
+[thresholds]
+long_running        = "5s"
+idle_in_transaction = "30s"
 ```
 
-The tool connects, starts polling, and opens the TUI. If `DATABASE_URL` is not set, it falls back to the local dev default (`postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres`).
+- **`dsn`** — PostgreSQL connection string (required). Supports any libpq-compatible DSN.
+- **`thresholds.long_running`** — queries exceeding this duration appear in the Long-running section (default: `5s`).
+- **`thresholds.idle_in_transaction`** — sessions exceeding this duration appear in the Idle in transaction section (default: `30s`).
+
+Omitting `[thresholds]` or individual threshold keys keeps the defaults.
+
+To use a different config file, pass `--config`:
+
+```bash
+pgincident --config /path/to/other.toml
+```
+
+## Starting pgincident
+
+Once `~/.pgincident.toml` is in place, run:
+
+```bash
+pgincident
+```
+
+The tool reads the config, connects to the database, and opens the TUI.
 
 ## Screens
 
