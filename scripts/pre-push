@@ -31,7 +31,7 @@ echo "==> Running unit tests..."
 env -u DATABASE_URL go test -race -coverprofile="$COVERAGE_TMP" -covermode=atomic ./internal/...
 
 echo "==> Checking coverage..."
-COVERAGE=$(go tool cover -func="$COVERAGE_TMP" | awk '/^total:/ { gsub(/%/, "", $3); print $3 }')
+COVERAGE=$(awk '/^mode:/ {next} {total += $(NF-1); if ($NF > 0) covered += $(NF-1)} END {if (total > 0) printf "%.1f", 100*covered/total}' "$COVERAGE_TMP")
 if awk -v c="$COVERAGE" 'BEGIN { exit (c+0 < 100 ? 1 : 0) }'; then
   : # 100% ok
 else
