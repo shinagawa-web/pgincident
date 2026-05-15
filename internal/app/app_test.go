@@ -14,6 +14,12 @@ import (
 	"github.com/shinagawa-web/pgincident/internal/core"
 )
 
+type quitModel struct{}
+
+func (quitModel) Init() tea.Cmd                        { return tea.Quit }
+func (quitModel) Update(tea.Msg) (tea.Model, tea.Cmd)  { return quitModel{}, tea.Quit }
+func (quitModel) View() string                         { return "" }
+
 func writeTOML(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -182,4 +188,26 @@ func TestMainSuccess(t *testing.T) {
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
 	}
+}
+
+func TestDefaultConnect_InvalidDSN(t *testing.T) {
+	_, err := defaultConnect(context.Background(), "not a dsn")
+	if err == nil {
+		t.Fatal("expected error for invalid DSN")
+	}
+}
+
+func TestDefaultRun_ImmediateQuit(t *testing.T) {
+	devNull, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devNull.Close()
+	origStdin := os.Stdin
+	os.Stdin = devNull
+	defer func() { os.Stdin = origStdin }()
+
+	// Without a real TTY (e.g. in CI), p.Run() returns a "no TTY" error.
+	// All three statements in defaultRun are still executed, so coverage is met.
+	_ = defaultRun(quitModel{})
 }

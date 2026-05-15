@@ -18,15 +18,20 @@ type dbClient interface {
 	Close(ctx context.Context)
 }
 
-var connectFn func(ctx context.Context, dsn string) (dbClient, error) = func(ctx context.Context, dsn string) (dbClient, error) {
+func defaultConnect(ctx context.Context, dsn string) (dbClient, error) {
 	return core.Connect(ctx, dsn)
 }
 
-var runFn = func(m tea.Model) error {
+func defaultRun(m tea.Model) error {
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
 }
+
+var (
+	connectFn func(ctx context.Context, dsn string) (dbClient, error) = defaultConnect
+	runFn                                                              = defaultRun
+)
 
 func Main(args []string, versionStr string, stdout, stderr io.Writer) int {
 	cfgPath, err := cli.ParseFlags(args)
