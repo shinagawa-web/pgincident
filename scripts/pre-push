@@ -39,7 +39,7 @@ else
   exit 1
 fi
 
-DATABASE_URL="${DATABASE_URL:-postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres}"
+export DATABASE_URL="${DATABASE_URL:-postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres}"
 echo "==> Running integration tests (DATABASE_URL=${DATABASE_URL})..."
 go test -race -v -timeout 2m -run Integration ./internal/core/...
 
