@@ -44,6 +44,19 @@ func DefaultPath() string {
 	return filepath.Join(home, ".pgincident.toml")
 }
 
+// ResolvePath returns cfgPath if non-empty. Otherwise it returns
+// .pgincident.toml in the current directory if the file exists, falling back
+// to DefaultPath.
+func ResolvePath(cfgPath string) string {
+	if cfgPath != "" {
+		return cfgPath
+	}
+	if _, err := os.Stat(".pgincident.toml"); err == nil {
+		return ".pgincident.toml"
+	}
+	return DefaultPath()
+}
+
 // Load reads and parses the TOML config file at path.
 // Threshold fields not present in the file keep their default values (5s / 30s).
 func Load(path string) (*Config, error) {

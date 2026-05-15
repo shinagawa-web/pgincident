@@ -94,3 +94,33 @@ func TestDefaultPath(t *testing.T) {
 		t.Errorf("DefaultPath base = %q, want .pgincident.toml", filepath.Base(p))
 	}
 }
+
+func TestResolvePathExplicit(t *testing.T) {
+	got := config.ResolvePath("/explicit/path.toml")
+	if got != "/explicit/path.toml" {
+		t.Errorf("got %q, want /explicit/path.toml", got)
+	}
+}
+
+func TestResolvePathCurrentDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".pgincident.toml"), []byte(""), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	if got := config.ResolvePath(""); got != ".pgincident.toml" {
+		t.Errorf("got %q, want .pgincident.toml", got)
+	}
+}
+
+func TestResolvePathFallbackHome(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	got := config.ResolvePath("")
+	if got == ".pgincident.toml" {
+		t.Error("got relative path, want absolute home path")
+	}
+	if filepath.Base(got) != ".pgincident.toml" {
+		t.Errorf("got %q, want path ending in .pgincident.toml", got)
+	}
+}

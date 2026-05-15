@@ -101,10 +101,26 @@ func TestRunProgramError(t *testing.T) {
 }
 
 func TestRunEmptyCfgPath(t *testing.T) {
+	t.Chdir(t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 	err := Run("")
 	if err == nil {
 		t.Error("expected error with no config file at default path")
+	}
+}
+
+func TestRunCurrentDirConfig(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".pgincident.toml"), []byte(`dsn = "postgres://u:p@localhost/db"`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	withMockConnect(t, func(_ context.Context, _ string) (dbClient, error) {
+		return &mockClient{}, nil
+	})
+	withMockRun(t, func(_ tea.Model) error { return nil })
+	if err := Run(""); err != nil {
+		t.Fatal(err)
 	}
 }
 

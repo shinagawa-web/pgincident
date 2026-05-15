@@ -50,9 +50,7 @@ func Main(args []string, versionStr string, stdout, stderr io.Writer) int {
 }
 
 func Run(cfgPath string) error {
-	if cfgPath == "" {
-		cfgPath = config.DefaultPath()
-	}
+	cfgPath = config.ResolvePath(cfgPath)
 
 	cfg, err := config.Load(cfgPath)
 	if err != nil {

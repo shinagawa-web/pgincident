@@ -2,7 +2,13 @@
 
 ## Configuration
 
-pgincident reads `~/.pgincident.toml` on startup. Create the file before first use:
+pgincident looks for a config file in this order:
+
+1. Path given by `--config PATH`
+2. `.pgincident.toml` in the current directory
+3. `~/.pgincident.toml`
+
+Create the file before first use:
 
 ```toml
 dsn = "postgres://user:password@localhost:5432/mydb"
