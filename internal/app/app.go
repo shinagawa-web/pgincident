@@ -50,7 +50,7 @@ var (
 	}
 )
 
-const initContent = "dsn = \"\"\n\n[thresholds]\nlong_running        = \"5s\"\nidle_in_transaction = \"30s\"\n"
+const initContent = "dsn = \"postgres://user:password@localhost:5432/mydb\"\n\n[thresholds]\nlong_running        = \"5s\"\nidle_in_transaction = \"30s\"\n"
 
 func Init(stdout io.Writer) error {
 	path, err := initPathFn()

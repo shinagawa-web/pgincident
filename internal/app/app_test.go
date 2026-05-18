@@ -264,7 +264,7 @@ func TestInitSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(got), `dsn = ""`) {
+	if !strings.Contains(string(got), `dsn = "postgres://`) {
 		t.Errorf("file content = %q, want dsn field", string(got))
 	}
 	if !strings.Contains(string(got), `long_running`) {
