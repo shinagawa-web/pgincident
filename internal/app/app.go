@@ -57,9 +57,7 @@ func Init(stdout io.Writer) error {
 		return err
 	}
 	defer f.Close()
-	if _, err := fmt.Fprint(f, initContent); err != nil {
-		return err
-	}
+	fmt.Fprint(f, initContent)
 	fmt.Fprintf(stdout, "Created %s\n", path)
 	return nil
 }

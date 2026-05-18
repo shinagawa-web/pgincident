@@ -285,6 +285,16 @@ func TestInitFileExists(t *testing.T) {
 	}
 }
 
+func TestInitOpenError(t *testing.T) {
+	withMockDefaultPath(t, func() (string, error) {
+		return "/nonexistent/dir/.pgincident.toml", nil
+	})
+	err := Init(&bytes.Buffer{})
+	if err == nil {
+		t.Error("expected error for unwritable path")
+	}
+}
+
 func TestInitDefaultPathError(t *testing.T) {
 	withMockDefaultPath(t, func() (string, error) { return "", fmt.Errorf("no home dir") })
 	err := Init(&bytes.Buffer{})
