@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -33,11 +35,34 @@ func defaultNewPoller(client dbClient, interval time.Duration) *core.Poller {
 }
 
 var (
-	connectFn   func(ctx context.Context, dsn string) (dbClient, error) = defaultConnect
-	runFn       func(tea.Model) error                                    = defaultRun
-	newPollerFn func(dbClient, time.Duration) *core.Poller               = defaultNewPoller
-	resolvePathFn = config.ResolvePath
+	connectFn     func(ctx context.Context, dsn string) (dbClient, error) = defaultConnect
+	runFn         func(tea.Model) error                                    = defaultRun
+	newPollerFn   func(dbClient, time.Duration) *core.Poller               = defaultNewPoller
+	resolvePathFn                                                           = config.ResolvePath
+	defaultPathFn                                                           = config.DefaultPath
 )
+
+const initContent = "dsn = \"\"\n\n[thresholds]\nlong_running        = \"5s\"\nidle_in_transaction = \"30s\"\n"
+
+func Init(stdout io.Writer) error {
+	path, err := defaultPathFn()
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("%s already exists", path)
+		}
+		return err
+	}
+	defer f.Close()
+	if _, err := fmt.Fprint(f, initContent); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "Created %s\n", path)
+	return nil
+}
 
 func Main(args []string, versionStr string, stdout, stderr io.Writer) int {
 	cfgPath, err := cli.ParseFlags(args)
@@ -47,6 +72,13 @@ func Main(args []string, versionStr string, stdout, stderr io.Writer) int {
 	}
 	if err == cli.ErrHelp {
 		fmt.Fprint(stdout, cli.HelpText)
+		return 0
+	}
+	if err == cli.ErrInit {
+		if err := Init(stdout); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 1
+		}
 		return 0
 	}
 	if err != nil {
