@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -38,14 +39,21 @@ var (
 	connectFn     func(ctx context.Context, dsn string) (dbClient, error) = defaultConnect
 	runFn         func(tea.Model) error                                    = defaultRun
 	newPollerFn   func(dbClient, time.Duration) *core.Poller               = defaultNewPoller
-	resolvePathFn                                                           = config.ResolvePath
-	defaultPathFn                                                           = config.DefaultPath
+	resolvePathFn = config.ResolvePath
+	getWdFn       = os.Getwd
+	initPathFn    = func() (string, error) {
+		cwd, err := getWdFn()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(cwd, ".pgincident.toml"), nil
+	}
 )
 
 const initContent = "dsn = \"\"\n\n[thresholds]\nlong_running        = \"5s\"\nidle_in_transaction = \"30s\"\n"
 
 func Init(stdout io.Writer) error {
-	path, err := defaultPathFn()
+	path, err := initPathFn()
 	if err != nil {
 		return err
 	}
