@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,6 +70,39 @@ func withMockResolvePath(t *testing.T, fn func(string) (string, error)) {
 	orig := resolvePathFn
 	resolvePathFn = fn
 	t.Cleanup(func() { resolvePathFn = orig })
+}
+
+type failWriter struct {
+	failWrite bool
+	failClose bool
+}
+
+func (w *failWriter) Write(p []byte) (int, error) {
+	if w.failWrite {
+		return 0, fmt.Errorf("write failed")
+	}
+	return len(p), nil
+}
+
+func (w *failWriter) Close() error {
+	if w.failClose {
+		return fmt.Errorf("close failed")
+	}
+	return nil
+}
+
+func withMockOpenInitFile(t *testing.T, fn func(string) (io.WriteCloser, error)) {
+	t.Helper()
+	orig := openInitFileFn
+	openInitFileFn = fn
+	t.Cleanup(func() { openInitFileFn = orig })
+}
+
+func withMockInitPath(t *testing.T, fn func() (string, error)) {
+	t.Helper()
+	orig := initPathFn
+	initPathFn = fn
+	t.Cleanup(func() { initPathFn = orig })
 }
 
 func TestRunResolvePathError(t *testing.T) {
@@ -239,6 +273,128 @@ idle_in_transaction = "2m"
 	}
 	if captured.IdleInTxThreshold != 2*time.Minute {
 		t.Errorf("IdleInTxThreshold = %v, want 2m", captured.IdleInTxThreshold)
+	}
+}
+
+func TestInitSuccess(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".pgincident.toml")
+	withMockInitPath(t, func() (string, error) { return path, nil })
+	var out bytes.Buffer
+	if err := Init(&out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), path) {
+		t.Errorf("stdout = %q, want path %s", out.String(), path)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), `dsn = "postgres://`) {
+		t.Errorf("file content = %q, want dsn field", string(got))
+	}
+	if !strings.Contains(string(got), `long_running`) {
+		t.Errorf("file content = %q, want long_running field", string(got))
+	}
+}
+
+func TestInitFileExists(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".pgincident.toml")
+	if err := os.WriteFile(path, []byte("existing"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	withMockInitPath(t, func() (string, error) { return path, nil })
+	err := Init(&bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("err = %v, want already exists error", err)
+	}
+}
+
+func TestInitWriteError(t *testing.T) {
+	withMockInitPath(t, func() (string, error) { return "/tmp/irrelevant.toml", nil })
+	withMockOpenInitFile(t, func(_ string) (io.WriteCloser, error) {
+		return &failWriter{failWrite: true}, nil
+	})
+	err := Init(&bytes.Buffer{})
+	if err == nil || err.Error() != "write failed" {
+		t.Errorf("err = %v, want write failed", err)
+	}
+}
+
+func TestInitCloseError(t *testing.T) {
+	withMockInitPath(t, func() (string, error) { return "/tmp/irrelevant.toml", nil })
+	withMockOpenInitFile(t, func(_ string) (io.WriteCloser, error) {
+		return &failWriter{failClose: true}, nil
+	})
+	err := Init(&bytes.Buffer{})
+	if err == nil || err.Error() != "close failed" {
+		t.Errorf("err = %v, want close failed", err)
+	}
+}
+
+func TestInitOpenError(t *testing.T) {
+	withMockInitPath(t, func() (string, error) {
+		return "/nonexistent/dir/.pgincident.toml", nil
+	})
+	err := Init(&bytes.Buffer{})
+	if err == nil {
+		t.Error("expected error for unwritable path")
+	}
+}
+
+func TestInitDefaultPathError(t *testing.T) {
+	withMockInitPath(t, func() (string, error) { return "", fmt.Errorf("no home dir") })
+	err := Init(&bytes.Buffer{})
+	if err == nil || err.Error() != "no home dir" {
+		t.Errorf("err = %v, want no home dir error", err)
+	}
+}
+
+func TestMainInit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".pgincident.toml")
+	withMockInitPath(t, func() (string, error) { return path, nil })
+	var out bytes.Buffer
+	code := Main([]string{"--init"}, "", &out, &bytes.Buffer{})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "Created") {
+		t.Errorf("stdout = %q, want Created message", out.String())
+	}
+}
+
+func TestMainInitError(t *testing.T) {
+	withMockInitPath(t, func() (string, error) { return "", fmt.Errorf("no home dir") })
+	var errBuf bytes.Buffer
+	code := Main([]string{"--init"}, "", &bytes.Buffer{}, &errBuf)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(errBuf.String(), "error:") {
+		t.Errorf("stderr = %q, want error message", errBuf.String())
+	}
+}
+
+func TestDefaultInitPath(t *testing.T) {
+	path, err := initPathFn()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(path) != ".pgincident.toml" {
+		t.Errorf("path = %q, want filename .pgincident.toml", path)
+	}
+}
+
+func TestDefaultInitPathGetWdError(t *testing.T) {
+	orig := getWdFn
+	getWdFn = func() (string, error) { return "", fmt.Errorf("getwd failed") }
+	t.Cleanup(func() { getWdFn = orig })
+	_, err := initPathFn()
+	if err == nil || err.Error() != "getwd failed" {
+		t.Errorf("err = %v, want getwd failed", err)
 	}
 }
 

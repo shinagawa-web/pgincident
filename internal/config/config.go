@@ -41,6 +41,20 @@ type Config struct {
 	Thresholds Thresholds `toml:"thresholds"`
 }
 
+var defaultThresholds = Thresholds{
+	LongRunning: Duration(5 * time.Second),
+	IdleInTx:    Duration(30 * time.Second),
+}
+
+// DefaultTOML returns the TOML template written by --init.
+func DefaultTOML() string {
+	return fmt.Sprintf(
+		"dsn = \"postgres://user:password@localhost:5432/mydb\"\n\n[thresholds]\nlong_running        = \"%s\"\nidle_in_transaction = \"%s\"\n",
+		defaultThresholds.LongRunning.TimeDuration(),
+		defaultThresholds.IdleInTx.TimeDuration(),
+	)
+}
+
 var userHomeDirFn = os.UserHomeDir
 
 // DefaultPath returns the default config file path (~/.pgincident.toml).
@@ -70,10 +84,7 @@ func ResolvePath(cfgPath string) (string, error) {
 // Unknown keys and non-positive threshold durations are rejected.
 func Load(path string) (*Config, error) {
 	cfg := &Config{
-		Thresholds: Thresholds{
-			LongRunning: Duration(5 * time.Second),
-			IdleInTx:    Duration(30 * time.Second),
-		},
+		Thresholds: defaultThresholds,
 	}
 	md, err := toml.DecodeFile(path, cfg)
 	if err != nil {

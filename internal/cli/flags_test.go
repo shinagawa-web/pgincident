@@ -69,6 +69,13 @@ func TestParseFlagsUnknown(t *testing.T) {
 	}
 }
 
+func TestParseFlagsInit(t *testing.T) {
+	_, err := cli.ParseFlags([]string{"--init"})
+	if err != cli.ErrInit {
+		t.Errorf("err = %v, want ErrInit", err)
+	}
+}
+
 func TestParseFlagsEmpty(t *testing.T) {
 	path, err := cli.ParseFlags([]string{})
 	if err != nil {

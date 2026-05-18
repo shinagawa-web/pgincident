@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +18,16 @@ func writeTOML(t *testing.T, content string) string {
 		t.Fatal(err)
 	}
 	return f
+}
+
+func TestDefaultTOML(t *testing.T) {
+	got := config.DefaultTOML()
+	if !strings.Contains(got, `long_running        = "5s"`) {
+		t.Errorf("DefaultTOML = %q, missing long_running default", got)
+	}
+	if !strings.Contains(got, `idle_in_transaction = "30s"`) {
+		t.Errorf("DefaultTOML = %q, missing idle_in_transaction default", got)
+	}
 }
 
 func TestLoadFull(t *testing.T) {
