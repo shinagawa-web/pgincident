@@ -1,0 +1,15 @@
+# pgincident configuration file
+# Copy this file to ~/.pgincident.toml and edit as needed.
+# You can also place .pgincident.toml in the current directory;
+# pgincident looks there before falling back to the home directory.
+
+# PostgreSQL connection string (required).
+# Supports all libpq-compatible DSN formats.
+dsn = "postgres://user:password@localhost:5432/mydb"
+
+[thresholds]
+# Flag queries running longer than this duration. Default: 5s
+long_running = "5s"
+
+# Flag connections stuck in idle-in-transaction longer than this duration. Default: 30s
+idle_in_transaction = "30s"

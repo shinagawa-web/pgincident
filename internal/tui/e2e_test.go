@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,6 +87,28 @@ func TestGoldenMainView(t *testing.T) {
 		screen:   ScreenDashboard,
 	}
 	golden.RequireEqual(t, []byte(ansi.Strip(app.View())))
+}
+
+func TestDashboardThresholdLabels(t *testing.T) {
+	poller := core.NewPoller(nil, time.Second)
+	poller.LongRunningThreshold = 8 * time.Second
+	poller.IdleInTxThreshold = 2 * time.Minute
+	app := &App{
+		pollCh:   make(chan core.PollResult),
+		cancel:   func() {},
+		poller:   poller,
+		width:    120,
+		height:   40,
+		snapshot: e2eSnapshot(),
+		screen:   ScreenDashboard,
+	}
+	view := ansi.Strip(app.View())
+	if !strings.Contains(view, "> 8s") {
+		t.Errorf("expected '> 8s' in view:\n%s", view)
+	}
+	if !strings.Contains(view, "> 2m0s") {
+		t.Errorf("expected '> 2m0s' in view:\n%s", view)
+	}
 }
 
 func TestGoldenOverviewView(t *testing.T) {

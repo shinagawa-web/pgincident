@@ -17,6 +17,13 @@ go build ./...
 echo "==> Linting..."
 go vet ./...
 
+echo "==> Checking main.go is thin..."
+MAIN_LINES=$(grep -cv '^[[:space:]]*\(//\|$\)' cmd/pgincident/main.go)
+if [ "$MAIN_LINES" -gt 15 ]; then
+  echo "cmd/pgincident/main.go is too long (${MAIN_LINES} non-blank/comment lines) — move logic to internal/"
+  exit 1
+fi
+
 COVERAGE_TMP=$(mktemp)
 trap 'rm -f "$COVERAGE_TMP"' EXIT
 
@@ -24,7 +31,7 @@ echo "==> Running unit tests..."
 env -u DATABASE_URL go test -race -coverprofile="$COVERAGE_TMP" -covermode=atomic ./internal/...
 
 echo "==> Checking coverage..."
-COVERAGE=$(go tool cover -func="$COVERAGE_TMP" | awk '/^total:/ { gsub(/%/, "", $3); print $3 }')
+COVERAGE=$(awk '/^mode:/ {next} {total += $(NF-1); if ($NF > 0) covered += $(NF-1)} END {if (total > 0) printf "%.1f", 100*covered/total}' "$COVERAGE_TMP")
 if awk -v c="$COVERAGE" 'BEGIN { exit (c+0 < 100 ? 1 : 0) }'; then
   : # 100% ok
 else
@@ -32,12 +39,8 @@ else
   exit 1
 fi
 
-if [ -z "$DATABASE_URL" ]; then
-  echo "DATABASE_URL is not set — integration tests are required before pushing."
-  echo "Run 'make dev-up' to start Postgres, then set DATABASE_URL and retry."
-  exit 1
-fi
-echo "==> Running integration tests..."
-go test -race -v -timeout 2m -run Integration ./internal/core/...
+export DATABASE_URL="${DATABASE_URL:-postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres}"
+echo "==> Running integration tests (DATABASE_URL=${DATABASE_URL})..."
+go test -race -v -timeout 2m -run Integration ./...
 
 echo "==> All checks passed."

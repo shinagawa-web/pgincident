@@ -44,7 +44,7 @@ func TestPadSectionAlreadyFull(t *testing.T) {
 }
 
 func TestRenderActivitySectionEmpty(t *testing.T) {
-	out := renderActivitySection(nil, 0, true, 5, 80)
+	out := renderActivitySection(nil, 0, true, 5, 80, 5*time.Second)
 	if !strings.Contains(out, "Long-running queries") {
 		t.Errorf("expected section title, got: %q", out)
 	}
@@ -58,7 +58,7 @@ func TestRenderActivitySectionWithData(t *testing.T) {
 		{PID: 1234, User: "alice", State: "active", Duration: 6 * time.Second, Query: "SELECT 1"},
 		{PID: 5678, User: "bob", State: "active", Duration: 12 * time.Second, Query: "UPDATE t SET x=1"},
 	}
-	out := renderActivitySection(activities, 0, true, 5, 80)
+	out := renderActivitySection(activities, 0, true, 5, 80, 5*time.Second)
 	if !strings.Contains(out, "1234") {
 		t.Errorf("expected PID 1234, got: %q", out)
 	}
@@ -74,7 +74,7 @@ func TestRenderActivitySectionInactive(t *testing.T) {
 	activities := []core.Activity{
 		{PID: 1234, User: "alice", State: "active", Duration: 6 * time.Second, Query: "SELECT 1"},
 	}
-	out := renderActivitySection(activities, 0, false, 5, 80)
+	out := renderActivitySection(activities, 0, false, 5, 80, 5*time.Second)
 	if strings.Contains(out, "▸") {
 		t.Errorf("inactive section should not show cursor, got: %q", out)
 	}
@@ -85,7 +85,7 @@ func TestRenderActivitySectionNarrowWidth(t *testing.T) {
 		{PID: 1, User: "u", State: "active", Duration: time.Second, Query: "SELECT 1"},
 	}
 	// width too narrow: colQuery falls back to minimum 10
-	out := renderActivitySection(activities, 0, true, 3, 20)
+	out := renderActivitySection(activities, 0, true, 3, 20, 5*time.Second)
 	if out == "" {
 		t.Error("expected non-empty output even on narrow width")
 	}
