@@ -29,11 +29,11 @@ func getenv(key, fallback string) string {
 }
 
 func main() {
-	dsn        := flag.String("dsn", getenv("DATABASE_URL", defaultDSN), "PostgreSQL DSN")
-	noTPS      := flag.Bool("no-tps", false, "disable background TPS workers")
-	noSlow     := flag.Bool("no-slow", false, "disable slow-query workers")
-	noLocks    := flag.Bool("no-locks", false, "disable lock contention workers")
-	noIdle     := flag.Bool("no-idle", false, "disable idle-in-transaction workers")
+	dsn := flag.String("dsn", getenv("DATABASE_URL", defaultDSN), "PostgreSQL DSN")
+	noTPS := flag.Bool("no-tps", false, "disable background TPS workers")
+	noSlow := flag.Bool("no-slow", false, "disable slow-query workers")
+	noLocks := flag.Bool("no-locks", false, "disable lock contention workers")
+	noIdle := flag.Bool("no-idle", false, "disable idle-in-transaction workers")
 	tpsWorkers := flag.Int("tps-workers", 8, "number of background TPS workers")
 	flag.Parse()
 
@@ -216,7 +216,7 @@ func lockCycle(ctx context.Context, dsn string, rowID int, holdMin, holdMax time
 	}
 	defer func() {
 		holder.Exec(context.Background(), "ROLLBACK") //nolint:errcheck
-		holder.Close(context.Background())             //nolint:errcheck
+		holder.Close(context.Background())            //nolint:errcheck
 	}()
 
 	waiter, err := pgx.Connect(ctx, dsn)
@@ -225,7 +225,7 @@ func lockCycle(ctx context.Context, dsn string, rowID int, holdMin, holdMax time
 	}
 	defer func() {
 		waiter.Exec(context.Background(), "ROLLBACK") //nolint:errcheck
-		waiter.Close(context.Background())             //nolint:errcheck
+		waiter.Close(context.Background())            //nolint:errcheck
 	}()
 
 	if _, err := holder.Exec(ctx, "BEGIN"); err != nil {
@@ -298,7 +298,7 @@ func idleCycle(ctx context.Context, dsn string, idleDuration time.Duration) erro
 	}
 
 	if rand.IntN(2) == 0 {
-		conn.Exec(context.Background(), "COMMIT")   //nolint:errcheck
+		conn.Exec(context.Background(), "COMMIT") //nolint:errcheck
 	} else {
 		conn.Exec(context.Background(), "ROLLBACK") //nolint:errcheck
 	}

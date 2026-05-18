@@ -17,9 +17,9 @@ import (
 
 type quitModel struct{}
 
-func (quitModel) Init() tea.Cmd                        { return tea.Quit }
-func (quitModel) Update(tea.Msg) (tea.Model, tea.Cmd)  { return quitModel{}, tea.Quit }
-func (quitModel) View() string                         { return "" }
+func (quitModel) Init() tea.Cmd                       { return tea.Quit }
+func (quitModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return quitModel{}, tea.Quit }
+func (quitModel) View() string                        { return "" }
 
 func writeTOML(t *testing.T, content string) string {
 	t.Helper()
@@ -37,12 +37,12 @@ func (m *mockClient) ServerInfo(_ context.Context) (string, string, error) { ret
 func (m *mockClient) LongRunning(_ context.Context, _ time.Duration) ([]core.Activity, error) {
 	return nil, nil
 }
-func (m *mockClient) Locks(_ context.Context) ([]core.Lock, error)  { return nil, nil }
+func (m *mockClient) Locks(_ context.Context) ([]core.Lock, error) { return nil, nil }
 func (m *mockClient) IdleInTx(_ context.Context, _ time.Duration) ([]core.Activity, error) {
 	return nil, nil
 }
 func (m *mockClient) Stats(_ context.Context) (core.DBStats, error) { return core.DBStats{}, nil }
-func (m *mockClient) Close(_ context.Context)                        {}
+func (m *mockClient) Close(_ context.Context)                       {}
 
 func withMockConnect(t *testing.T, fn func(ctx context.Context, dsn string) (dbClient, error)) {
 	t.Helper()
@@ -122,11 +122,11 @@ func TestRunConfigLoadError(t *testing.T) {
 	}
 }
 
-func TestRunNoDSN(t *testing.T) {
-	f := writeTOML(t, `# no dsn`)
+func TestRunNoConnections(t *testing.T) {
+	f := writeTOML(t, `# no connections`)
 	err := Run(f)
-	if err == nil || !strings.Contains(err.Error(), "no DSN") {
-		t.Errorf("err = %v, want DSN error", err)
+	if err == nil || !strings.Contains(err.Error(), "no connections") {
+		t.Errorf("err = %v, want no connections error", err)
 	}
 }
 
@@ -134,7 +134,7 @@ func TestRunConnectError(t *testing.T) {
 	withMockConnect(t, func(_ context.Context, _ string) (dbClient, error) {
 		return nil, fmt.Errorf("connect failed")
 	})
-	f := writeTOML(t, `dsn = "postgres://u:p@localhost/db"`)
+	f := writeTOML(t, "[connections.default]\ndsn = \"postgres://u:p@localhost/db\"")
 	err := Run(f)
 	if err == nil || !strings.Contains(err.Error(), "connect failed") {
 		t.Errorf("err = %v, want connect error", err)
@@ -146,7 +146,7 @@ func TestRunSuccess(t *testing.T) {
 		return &mockClient{}, nil
 	})
 	withMockRun(t, func(_ tea.Model) error { return nil })
-	f := writeTOML(t, `dsn = "postgres://u:p@localhost/db"`)
+	f := writeTOML(t, "[connections.default]\ndsn = \"postgres://u:p@localhost/db\"")
 	if err := Run(f); err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestRunProgramError(t *testing.T) {
 		return &mockClient{}, nil
 	})
 	withMockRun(t, func(_ tea.Model) error { return fmt.Errorf("tui error") })
-	f := writeTOML(t, `dsn = "postgres://u:p@localhost/db"`)
+	f := writeTOML(t, "[connections.default]\ndsn = \"postgres://u:p@localhost/db\"")
 	err := Run(f)
 	if err == nil || err.Error() != "tui error" {
 		t.Errorf("err = %v, want tui error", err)
@@ -175,7 +175,7 @@ func TestRunEmptyCfgPath(t *testing.T) {
 
 func TestRunCurrentDirConfig(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".pgincident.toml"), []byte(`dsn = "postgres://u:p@localhost/db"`), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".pgincident.toml"), []byte("[connections.default]\ndsn = \"postgres://u:p@localhost/db\""), 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(dir)
@@ -225,7 +225,7 @@ func TestMainRunError(t *testing.T) {
 	withMockConnect(t, func(_ context.Context, _ string) (dbClient, error) {
 		return nil, fmt.Errorf("db down")
 	})
-	f := writeTOML(t, `dsn = "postgres://u:p@localhost/db"`)
+	f := writeTOML(t, "[connections.default]\ndsn = \"postgres://u:p@localhost/db\"")
 	var errBuf bytes.Buffer
 	code := Main([]string{"--config", f}, "", &bytes.Buffer{}, &errBuf)
 	if code != 1 {
@@ -241,7 +241,7 @@ func TestMainSuccess(t *testing.T) {
 		return &mockClient{}, nil
 	})
 	withMockRun(t, func(_ tea.Model) error { return nil })
-	f := writeTOML(t, `dsn = "postgres://u:p@localhost/db"`)
+	f := writeTOML(t, "[connections.default]\ndsn = \"postgres://u:p@localhost/db\"")
 	code := Main([]string{"--config", f}, "", &bytes.Buffer{}, &bytes.Buffer{})
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
@@ -260,6 +260,7 @@ func TestRunThresholdPropagation(t *testing.T) {
 	})
 	withMockRun(t, func(_ tea.Model) error { return nil })
 	f := writeTOML(t, `
+[connections.default]
 dsn = "postgres://u:p@localhost/db"
 [thresholds]
 long_running = "10s"
@@ -290,6 +291,9 @@ func TestInitSuccess(t *testing.T) {
 	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), `[connections.default]`) {
+		t.Errorf("file content = %q, want [connections.default] section", string(got))
 	}
 	if !strings.Contains(string(got), `dsn = "postgres://`) {
 		t.Errorf("file content = %q, want dsn field", string(got))
@@ -418,4 +422,55 @@ func TestDefaultRun_ImmediateQuit(t *testing.T) {
 	// Without a real TTY (e.g. in CI), p.Run() returns a "no TTY" error.
 	// All three statements in defaultRun are still executed, so coverage is met.
 	_ = defaultRun(quitModel{})
+}
+
+type trackingClient struct {
+	mockClient
+	closed bool
+}
+
+func (c *trackingClient) Close(_ context.Context) { c.closed = true }
+
+func TestBuildReconnectSuccess(t *testing.T) {
+	old := &trackingClient{}
+	var client dbClient = old
+	withMockConnect(t, func(_ context.Context, _ string) (dbClient, error) {
+		return &mockClient{}, nil
+	})
+	pol := core.NewPoller(nil, 5*time.Second)
+	pol.LongRunningThreshold = 10 * time.Second
+	pol.IdleInTxThreshold = 2 * time.Minute
+
+	reconnect := buildReconnect(&client, pol)
+	newPol, err := reconnect(context.Background(), "postgres://new@localhost/db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !old.closed {
+		t.Error("expected old client to be closed after reconnect")
+	}
+	if newPol.LongRunningThreshold != 10*time.Second {
+		t.Errorf("LongRunningThreshold = %v, want 10s", newPol.LongRunningThreshold)
+	}
+	if newPol.IdleInTxThreshold != 2*time.Minute {
+		t.Errorf("IdleInTxThreshold = %v, want 2m", newPol.IdleInTxThreshold)
+	}
+}
+
+func TestBuildReconnectConnectError(t *testing.T) {
+	old := &trackingClient{}
+	var client dbClient = old
+	withMockConnect(t, func(_ context.Context, _ string) (dbClient, error) {
+		return nil, fmt.Errorf("connection refused")
+	})
+	pol := core.NewPoller(nil, 5*time.Second)
+
+	reconnect := buildReconnect(&client, pol)
+	_, err := reconnect(context.Background(), "postgres://bad@localhost/db")
+	if err == nil || err.Error() != "connection refused" {
+		t.Errorf("err = %v, want connection refused", err)
+	}
+	if old.closed {
+		t.Error("old client must not be closed when connect fails")
+	}
 }

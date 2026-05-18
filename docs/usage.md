@@ -15,9 +15,10 @@ pgincident --init
 # Created /your/project/.pgincident.toml
 ```
 
-Then edit the generated file and set your DSN:
+Then edit the generated file and set your DSN. A minimal single-connection config:
 
 ```toml
+[connections.default]
 dsn = "postgres://user:password@localhost:5432/mydb"
 
 [thresholds]
@@ -25,11 +26,25 @@ long_running        = "5s"
 idle_in_transaction = "30s"
 ```
 
-- **`dsn`** — PostgreSQL connection string (required). Supports any libpq-compatible DSN.
+You can define multiple connections and switch between them at runtime:
+
+```toml
+[connections.primary]
+dsn = "postgres://user:password@primary:5432/mydb"
+
+[connections.replica]
+dsn = "postgres://user:password@replica:5432/mydb"
+
+[thresholds]
+long_running        = "5s"
+idle_in_transaction = "30s"
+```
+
+- **`connections.<name>.dsn`** — PostgreSQL connection string for the named preset. Supports any libpq-compatible DSN. At least one `[connections.*]` section is required.
 - **`thresholds.long_running`** — queries exceeding this duration appear in the Long-running section (default: `5s`).
 - **`thresholds.idle_in_transaction`** — sessions exceeding this duration appear in the Idle in transaction section (default: `30s`).
 
-Omitting `[thresholds]` or individual threshold keys keeps the defaults.
+pgincident connects to the first connection defined in the file on startup. Omitting `[thresholds]` or individual threshold keys keeps the defaults.
 
 To use a different config file, pass `--config`:
 
@@ -136,6 +151,7 @@ Press `Enter` on a row in the Long-running queries section to open the full SQL.
 |---|---|
 | `o` | Switch to Dashboard |
 | `+` / `-` | Increase / decrease refresh interval |
+| `c` | Open connection selector (only shown when multiple connections are defined) |
 | `?` | Help overlay |
 | `q` / `Ctrl-C` | Quit |
 
@@ -150,8 +166,18 @@ Press `Enter` on a row in the Long-running queries section to open the full SQL.
 | `↓` / `j` | Move cursor down |
 | `Enter` | Open query detail overlay (Long-running queries only) |
 | `+` / `-` | Increase / decrease refresh interval |
+| `c` | Open connection selector (only shown when multiple connections are defined) |
 | `?` | Help overlay |
 | `q` / `Ctrl-C` | Quit |
+
+### Connection selector overlay
+
+| Key | Action |
+|---|---|
+| `↑` / `k` | Move cursor up |
+| `↓` / `j` | Move cursor down |
+| `Enter` | Connect to selected connection |
+| `Esc` / `c` / `q` | Cancel and close |
 
 ### Query detail overlay
 

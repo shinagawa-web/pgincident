@@ -11,7 +11,7 @@ import (
 
 func TestRenderTitleBarNoServer(t *testing.T) {
 	s := core.Snapshot{}
-	out := renderTitleBar(s, time.Second, 80)
+	out := renderTitleBar(s, time.Second, "", 80)
 	if !strings.Contains(out, "pgincident") {
 		t.Errorf("expected pgincident in title bar, got: %q", out)
 	}
@@ -19,7 +19,7 @@ func TestRenderTitleBarNoServer(t *testing.T) {
 
 func TestRenderTitleBarNarrowWidth(t *testing.T) {
 	s := core.Snapshot{ServerAddr: "localhost:5432", PGVersion: "16.1"}
-	out := renderTitleBar(s, time.Second, 1) // very narrow → gap < 1 path
+	out := renderTitleBar(s, time.Second, "", 1) // very narrow → gap < 1 path
 	if out == "" {
 		t.Error("expected non-empty output even on narrow width")
 	}
@@ -27,7 +27,7 @@ func TestRenderTitleBarNarrowWidth(t *testing.T) {
 
 func TestRenderTitleBarWithServer(t *testing.T) {
 	s := core.Snapshot{ServerAddr: "localhost:5432", PGVersion: "16.1"}
-	out := renderTitleBar(s, 2*time.Second, 80)
+	out := renderTitleBar(s, 2*time.Second, "", 80)
 	if !strings.Contains(out, "localhost:5432") {
 		t.Errorf("expected server addr in title bar, got: %q", out)
 	}
@@ -36,6 +36,14 @@ func TestRenderTitleBarWithServer(t *testing.T) {
 	}
 	if !strings.Contains(out, "2.0s") {
 		t.Errorf("expected interval in title bar, got: %q", out)
+	}
+}
+
+func TestRenderTitleBarWithConnName(t *testing.T) {
+	s := core.Snapshot{ServerAddr: "localhost:5432", PGVersion: "16.1"}
+	out := renderTitleBar(s, time.Second, "primary", 120)
+	if !strings.Contains(out, "primary") {
+		t.Errorf("expected conn name in title bar, got: %q", out)
 	}
 }
 
@@ -83,9 +91,19 @@ func TestRenderStatusEmpty(t *testing.T) {
 }
 
 func TestRenderFooter(t *testing.T) {
-	out := renderFooter()
+	out := renderFooter(false)
 	if !strings.Contains(out, "[q]uit") {
 		t.Errorf("expected footer content, got: %q", out)
+	}
+	if strings.Contains(out, "[c]connections") {
+		t.Errorf("unexpected [c]connections hint when multiConn=false, got: %q", out)
+	}
+}
+
+func TestRenderFooterMultiConn(t *testing.T) {
+	out := renderFooter(true)
+	if !strings.Contains(out, "[c]connections") {
+		t.Errorf("expected [c]connections hint when multiConn=true, got: %q", out)
 	}
 }
 

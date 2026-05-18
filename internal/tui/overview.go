@@ -12,7 +12,7 @@ func (a *App) renderOverview() string {
 	div := dimStyle.Render(strings.Repeat("─", a.width))
 
 	parts := []string{
-		renderTitleBar(a.snapshot, a.poller.Interval(), a.width),
+		renderTitleBar(a.snapshot, a.poller.Interval(), a.currentConn, a.width),
 		div,
 		boldStyle.Render("  DB Health Overview"),
 		div,

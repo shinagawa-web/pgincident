@@ -10,12 +10,16 @@ import (
 	"github.com/shinagawa-web/pgincident/internal/version"
 )
 
-func renderTitleBar(s core.Snapshot, interval time.Duration, width int) string {
+func renderTitleBar(s core.Snapshot, interval time.Duration, connName string, width int) string {
 	left := boldStyle.Render("pgincident") + " v" + version.Version
 	right := ""
 	if s.ServerAddr != "" {
-		right = dimStyle.Render(fmt.Sprintf("connected: %s (PG %s)  interval: %.1fs",
-			s.ServerAddr, s.PGVersion, interval.Seconds()))
+		connPart := ""
+		if connName != "" {
+			connPart = connName + " · "
+		}
+		right = dimStyle.Render(fmt.Sprintf("%sconnected: %s (PG %s)  interval: %.1fs",
+			connPart, s.ServerAddr, s.PGVersion, interval.Seconds()))
 	}
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
@@ -47,8 +51,13 @@ func renderStatus(err error, msg string) string {
 	return ""
 }
 
-func renderFooter() string {
-	return footerStyle.Render("[q]uit  [Tab]section  [↑↓/jk]cursor  [o]overview  [Enter]detail  [+/-]interval  [?]help")
+func renderFooter(multiConn bool) string {
+	s := "[q]uit  [Tab]section  [↑↓/jk]cursor  [o]overview  [Enter]detail  [+/-]interval"
+	if multiConn {
+		s += "  [c]connections"
+	}
+	s += "  [?]help"
+	return footerStyle.Render(s)
 }
 
 // sectionTitle renders a title row with the count badge right-aligned.

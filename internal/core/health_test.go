@@ -79,9 +79,9 @@ func TestAutovacuumStatus(t *testing.T) {
 		want    HealthStatus
 	}{
 		{0, StatusNormal},
-		{3, StatusNormal},   // exactly at threshold — still normal
+		{3, StatusNormal}, // exactly at threshold — still normal
 		{4, StatusWarning},
-		{5, StatusWarning},  // exactly at crit threshold — still warn
+		{5, StatusWarning}, // exactly at crit threshold — still warn
 		{6, StatusCritical},
 	}
 	for _, c := range cases {

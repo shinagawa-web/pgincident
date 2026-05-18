@@ -22,6 +22,9 @@ func writeTOML(t *testing.T, content string) string {
 
 func TestDefaultTOML(t *testing.T) {
 	got := config.DefaultTOML()
+	if !strings.Contains(got, `[connections.default]`) {
+		t.Errorf("DefaultTOML = %q, missing [connections.default]", got)
+	}
 	if !strings.Contains(got, `long_running        = "5s"`) {
 		t.Errorf("DefaultTOML = %q, missing long_running default", got)
 	}
@@ -32,6 +35,7 @@ func TestDefaultTOML(t *testing.T) {
 
 func TestLoadFull(t *testing.T) {
 	f := writeTOML(t, `
+[connections.primary]
 dsn = "postgres://u:p@localhost/db"
 
 [thresholds]
@@ -42,8 +46,12 @@ idle_in_transaction = "2m"
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.DSN != "postgres://u:p@localhost/db" {
-		t.Errorf("DSN = %q, want postgres://u:p@localhost/db", cfg.DSN)
+	conn, ok := cfg.Connections["primary"]
+	if !ok {
+		t.Fatal("expected connections.primary")
+	}
+	if conn.DSN != "postgres://u:p@localhost/db" {
+		t.Errorf("DSN = %q, want postgres://u:p@localhost/db", conn.DSN)
 	}
 	if got := cfg.Thresholds.LongRunning.TimeDuration(); got != 10*time.Second {
 		t.Errorf("LongRunning = %v, want 10s", got)
@@ -54,7 +62,10 @@ idle_in_transaction = "2m"
 }
 
 func TestLoadDefaultThresholds(t *testing.T) {
-	f := writeTOML(t, `dsn = "postgres://u:p@localhost/db"`)
+	f := writeTOML(t, `
+[connections.default]
+dsn = "postgres://u:p@localhost/db"
+`)
 	cfg, err := config.Load(f)
 	if err != nil {
 		t.Fatal(err)
@@ -67,8 +78,55 @@ func TestLoadDefaultThresholds(t *testing.T) {
 	}
 }
 
+func TestLoadConnectionOrder(t *testing.T) {
+	f := writeTOML(t, `
+[connections.zebra]
+dsn = "postgres://z@localhost/db"
+
+[connections.alpha]
+dsn = "postgres://a@localhost/db"
+
+[connections.mango]
+dsn = "postgres://m@localhost/db"
+`)
+	cfg, err := config.Load(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"zebra", "alpha", "mango"}
+	if len(cfg.ConnectionOrder) != len(want) {
+		t.Fatalf("ConnectionOrder = %v, want %v", cfg.ConnectionOrder, want)
+	}
+	for i, name := range want {
+		if cfg.ConnectionOrder[i] != name {
+			t.Errorf("ConnectionOrder[%d] = %q, want %q", i, cfg.ConnectionOrder[i], name)
+		}
+	}
+}
+
+func TestLoadMultipleConnections(t *testing.T) {
+	f := writeTOML(t, `
+[connections.primary]
+dsn = "postgres://u:p@primary/db"
+
+[connections.replica]
+dsn = "postgres://u:p@replica/db"
+`)
+	cfg, err := config.Load(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Connections) != 2 {
+		t.Errorf("len(Connections) = %d, want 2", len(cfg.Connections))
+	}
+	if cfg.ConnectionOrder[0] != "primary" {
+		t.Errorf("first connection = %q, want primary", cfg.ConnectionOrder[0])
+	}
+}
+
 func TestLoadInvalidDuration(t *testing.T) {
 	f := writeTOML(t, `
+[connections.default]
 dsn = "postgres://u:p@localhost/db"
 [thresholds]
 long_running = "bad"
@@ -81,6 +139,7 @@ long_running = "bad"
 
 func TestLoadNegativeDuration(t *testing.T) {
 	f := writeTOML(t, `
+[connections.default]
 dsn = "postgres://u:p@localhost/db"
 [thresholds]
 long_running = "-5s"
@@ -93,6 +152,7 @@ long_running = "-5s"
 
 func TestLoadZeroDuration(t *testing.T) {
 	f := writeTOML(t, `
+[connections.default]
 dsn = "postgres://u:p@localhost/db"
 [thresholds]
 long_running = "0s"
@@ -105,6 +165,7 @@ long_running = "0s"
 
 func TestLoadUnknownKey(t *testing.T) {
 	f := writeTOML(t, `
+[connections.default]
 dsn = "postgres://u:p@localhost/db"
 [thresholds]
 idle_in_transcation = "30s"
@@ -119,6 +180,48 @@ func TestLoadMissingFile(t *testing.T) {
 	_, err := config.Load("/nonexistent/path/.pgincident.toml")
 	if err == nil {
 		t.Error("expected error for missing file, got nil")
+	}
+}
+
+func TestLoadNoConnections(t *testing.T) {
+	f := writeTOML(t, `
+[thresholds]
+long_running = "5s"
+idle_in_transaction = "30s"
+`)
+	_, err := config.Load(f)
+	if err == nil {
+		t.Error("expected error for no connections, got nil")
+	}
+	if !strings.Contains(err.Error(), "no connections") {
+		t.Errorf("err = %v, want no connections error", err)
+	}
+}
+
+func TestLoadOldTopLevelDSN(t *testing.T) {
+	f := writeTOML(t, `
+dsn = "postgres://u:p@localhost/db"
+`)
+	_, err := config.Load(f)
+	if err == nil {
+		t.Error("expected error for old top-level dsn, got nil")
+	}
+	if !strings.Contains(err.Error(), "top-level 'dsn' is no longer supported") {
+		t.Errorf("err = %v, want migration hint error", err)
+	}
+}
+
+func TestLoadEmptyDSN(t *testing.T) {
+	f := writeTOML(t, `
+[connections.default]
+dsn = ""
+`)
+	_, err := config.Load(f)
+	if err == nil {
+		t.Error("expected error for empty DSN, got nil")
+	}
+	if !strings.Contains(err.Error(), "no dsn") {
+		t.Errorf("err = %v, want no dsn error", err)
 	}
 }
 
