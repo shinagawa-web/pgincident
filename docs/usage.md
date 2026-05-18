@@ -8,7 +8,14 @@ pgincident looks for a config file in this order:
 2. `.pgincident.toml` in the current directory
 3. `~/.pgincident.toml`
 
-Create the file before first use:
+Run `--init` in your project directory to generate a config file with defaults:
+
+```bash
+pgincident --init
+# Created /your/project/.pgincident.toml
+```
+
+Then edit the generated file and set your DSN:
 
 ```toml
 dsn = "postgres://user:password@localhost:5432/mydb"
@@ -32,7 +39,7 @@ pgincident --config /path/to/other.toml
 
 ## Starting pgincident
 
-Once `~/.pgincident.toml` is in place, run:
+Once `.pgincident.toml` is in place, run:
 
 ```bash
 pgincident
