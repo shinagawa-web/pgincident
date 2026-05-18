@@ -39,33 +39,39 @@ var (
 	connectFn     func(ctx context.Context, dsn string) (dbClient, error) = defaultConnect
 	runFn         func(tea.Model) error                                    = defaultRun
 	newPollerFn   func(dbClient, time.Duration) *core.Poller               = defaultNewPoller
-	resolvePathFn = config.ResolvePath
-	getWdFn       = os.Getwd
-	initPathFn    = func() (string, error) {
+	resolvePathFn  = config.ResolvePath
+	getWdFn        = os.Getwd
+	initPathFn     = func() (string, error) {
 		cwd, err := getWdFn()
 		if err != nil {
 			return "", err
 		}
 		return filepath.Join(cwd, ".pgincident.toml"), nil
 	}
+	openInitFileFn = func(path string) (io.WriteCloser, error) {
+		return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	}
 )
-
-const initContent = "dsn = \"postgres://user:password@localhost:5432/mydb\"\n\n[thresholds]\nlong_running        = \"5s\"\nidle_in_transaction = \"30s\"\n"
 
 func Init(stdout io.Writer) error {
 	path, err := initPathFn()
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	f, err := openInitFileFn(path)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return fmt.Errorf("%s already exists", path)
 		}
 		return err
 	}
-	defer f.Close()
-	fmt.Fprint(f, initContent)
+	if _, err := fmt.Fprint(f, config.DefaultTOML()); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
 	fmt.Fprintf(stdout, "Created %s\n", path)
 	return nil
 }

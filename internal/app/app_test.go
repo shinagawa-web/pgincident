@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,6 +70,32 @@ func withMockResolvePath(t *testing.T, fn func(string) (string, error)) {
 	orig := resolvePathFn
 	resolvePathFn = fn
 	t.Cleanup(func() { resolvePathFn = orig })
+}
+
+type failWriter struct {
+	failWrite bool
+	failClose bool
+}
+
+func (w *failWriter) Write(p []byte) (int, error) {
+	if w.failWrite {
+		return 0, fmt.Errorf("write failed")
+	}
+	return len(p), nil
+}
+
+func (w *failWriter) Close() error {
+	if w.failClose {
+		return fmt.Errorf("close failed")
+	}
+	return nil
+}
+
+func withMockOpenInitFile(t *testing.T, fn func(string) (io.WriteCloser, error)) {
+	t.Helper()
+	orig := openInitFileFn
+	openInitFileFn = fn
+	t.Cleanup(func() { openInitFileFn = orig })
 }
 
 func withMockInitPath(t *testing.T, fn func() (string, error)) {
@@ -282,6 +309,28 @@ func TestInitFileExists(t *testing.T) {
 	err := Init(&bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Errorf("err = %v, want already exists error", err)
+	}
+}
+
+func TestInitWriteError(t *testing.T) {
+	withMockInitPath(t, func() (string, error) { return "/tmp/irrelevant.toml", nil })
+	withMockOpenInitFile(t, func(_ string) (io.WriteCloser, error) {
+		return &failWriter{failWrite: true}, nil
+	})
+	err := Init(&bytes.Buffer{})
+	if err == nil || err.Error() != "write failed" {
+		t.Errorf("err = %v, want write failed", err)
+	}
+}
+
+func TestInitCloseError(t *testing.T) {
+	withMockInitPath(t, func() (string, error) { return "/tmp/irrelevant.toml", nil })
+	withMockOpenInitFile(t, func(_ string) (io.WriteCloser, error) {
+		return &failWriter{failClose: true}, nil
+	})
+	err := Init(&bytes.Buffer{})
+	if err == nil || err.Error() != "close failed" {
+		t.Errorf("err = %v, want close failed", err)
 	}
 }
 
