@@ -7,20 +7,19 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/shinagawa-web/pgincident/internal/core"
-	"github.com/shinagawa-web/pgincident/internal/version"
 )
 
 func renderTitleBar(s core.Snapshot, interval time.Duration, connName string, width int) string {
-	left := boldStyle.Render("pgincident") + " v" + version.Version
-	right := ""
-	if s.ServerAddr != "" {
-		connPart := ""
-		if connName != "" {
-			connPart = connName + " · "
+	var left string
+	if connName != "" {
+		left = boldStyle.Render(connName)
+		if s.ServerAddr != "" {
+			left += dimStyle.Render(fmt.Sprintf("  %s  PG %s", s.ServerAddr, s.PGVersion))
 		}
-		right = dimStyle.Render(fmt.Sprintf("%sconnected: %s (PG %s)  interval: %.1fs",
-			connPart, s.ServerAddr, s.PGVersion, interval.Seconds()))
+	} else if s.ServerAddr != "" {
+		left = dimStyle.Render(fmt.Sprintf("%s  PG %s", s.ServerAddr, s.PGVersion))
 	}
+	right := dimStyle.Render(fmt.Sprintf("interval: %.1fs", interval.Seconds()))
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
 		gap = 1

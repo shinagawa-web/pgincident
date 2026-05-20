@@ -172,8 +172,8 @@ func TestViewTooSmall(t *testing.T) {
 func TestViewNormal(t *testing.T) {
 	app := newTestApp()
 	v := app.View()
-	if !strings.Contains(v, "pgincident") {
-		t.Errorf("expected pgincident in view, got: %q", v)
+	if !strings.Contains(v, "interval:") {
+		t.Errorf("expected interval in title bar, got: %q", v)
 	}
 	if !strings.Contains(v, "Long-running queries") {
 		t.Errorf("expected activity section in view, got: %q", v)

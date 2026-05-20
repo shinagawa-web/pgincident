@@ -64,6 +64,7 @@ func (c *Client) ServerInfo(ctx context.Context) (version, addr string, err erro
 	if err != nil {
 		return
 	}
+	version, _, _ = strings.Cut(version, " ") // drop OS suffix e.g. "(Debian 17.10-1.pgdg13+1)"
 	cfg := c.conn.Config()
 	addr = fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	return

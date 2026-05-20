@@ -12,8 +12,8 @@ import (
 func TestRenderTitleBarNoServer(t *testing.T) {
 	s := core.Snapshot{}
 	out := renderTitleBar(s, time.Second, "", 80)
-	if !strings.Contains(out, "pgincident") {
-		t.Errorf("expected pgincident in title bar, got: %q", out)
+	if !strings.Contains(out, "interval:") {
+		t.Errorf("expected interval in title bar, got: %q", out)
 	}
 }
 

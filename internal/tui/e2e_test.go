@@ -144,7 +144,7 @@ func TestE2EQuit(t *testing.T) {
 	tm := teatest.NewTestModel(t, app, teatest.WithInitialTermSize(120, 40))
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return bytes.Contains(stripped(bts), []byte("pgincident"))
+		return bytes.Contains(stripped(bts), []byte("interval:"))
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -167,7 +167,7 @@ func TestE2EHelpViaKey(t *testing.T) {
 	t.Cleanup(func() { tm.Quit() })
 
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return bytes.Contains(stripped(bts), []byte("pgincident"))
+		return bytes.Contains(stripped(bts), []byte("interval:"))
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(50*time.Millisecond))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
