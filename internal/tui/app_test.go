@@ -598,6 +598,18 @@ func TestViewOverview(t *testing.T) {
 	if !strings.Contains(v, "[o]dashboard") {
 		t.Errorf("expected overview footer hint, got: %q", v)
 	}
+	if strings.Contains(v, "[c]connections") {
+		t.Errorf("unexpected [c]connections in overview footer for single conn, got: %q", v)
+	}
+}
+
+func TestViewOverviewFooterMultiConn(t *testing.T) {
+	app := newMultiConnApp()
+	app.screen = ScreenOverview
+	v := app.View()
+	if !strings.Contains(v, "[c]connections") {
+		t.Errorf("expected [c]connections in overview footer for multi-conn, got: %q", v)
+	}
 }
 
 func TestViewOverviewNoReplicationRowWhenNoStandbys(t *testing.T) {

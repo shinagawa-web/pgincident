@@ -22,7 +22,7 @@ func (a *App) renderOverview() string {
 		renderOverviewMetrics(a.snapshot.DBStats),
 		"",
 		div,
-		renderOverviewFooter(),
+		renderOverviewFooter(len(a.connList) > 1),
 	}
 	return strings.Join(parts, "\n")
 }
@@ -68,6 +68,11 @@ func fmtTPS(tps float64) string {
 	return fmt.Sprintf("%.0f", tps)
 }
 
-func renderOverviewFooter() string {
-	return footerStyle.Render("[o]dashboard  [q]uit  [+/-]interval  [?]help")
+func renderOverviewFooter(multiConn bool) string {
+	s := "[o]dashboard  [q]uit  [+/-]interval"
+	if multiConn {
+		s += "  [c]connections"
+	}
+	s += "  [?]help"
+	return footerStyle.Render(s)
 }
