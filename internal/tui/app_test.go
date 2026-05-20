@@ -14,13 +14,16 @@ import (
 
 func newTestApp() *App {
 	_, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	close(done) // pre-closed: simulates a stopped poller goroutine
 	return &App{
-		poller: core.NewPoller(nil, time.Second),
-		pollCh: make(chan core.PollResult, 1),
-		cancel: cancel,
-		width:  100,
-		height: 30,
-		screen: ScreenDashboard, // most tests target Dashboard behavior
+		poller:     core.NewPoller(nil, time.Second),
+		pollCh:     make(chan core.PollResult, 1),
+		cancel:     cancel,
+		width:      100,
+		height:     30,
+		screen:     ScreenDashboard, // most tests target Dashboard behavior
+		pollerDone: done,
 	}
 }
 
@@ -49,6 +52,15 @@ func TestWaitForSnapshotError(t *testing.T) {
 	}
 	if r.Err == nil {
 		t.Error("expected error in snapshotMsg")
+	}
+}
+
+func TestWaitForSnapshotChannelClosed(t *testing.T) {
+	ch := make(chan core.PollResult)
+	close(ch)
+	msg := waitForSnapshot(ch, 0)()
+	if msg != nil {
+		t.Errorf("expected nil when channel closed, got %T", msg)
 	}
 }
 
@@ -838,7 +850,11 @@ func TestNew(t *testing.T) {
 	if len(app.connList) != 1 {
 		t.Errorf("len(connList) = %d, want 1", len(app.connList))
 	}
+	if app.pollerDone == nil {
+		t.Error("expected pollerDone to be set")
+	}
 	app.cancel()
+	<-app.pollerDone // confirm goroutine exits after cancel
 }
 
 // --- clampScroll ---
@@ -1173,7 +1189,10 @@ func TestUpdateConnectionSwitched(t *testing.T) {
 	newPoller := core.NewPoller(&mockQuerier{}, 2*time.Second)
 	model, cmd := app.Update(connectionSwitchedMsg{poller: newPoller, name: "replica"})
 	a := model.(*App)
-	t.Cleanup(a.cancel) // stop goroutine started by connectionSwitchedMsg
+	t.Cleanup(func() {
+		a.cancel()
+		<-a.pollerDone // confirm goroutine exits after cancel
+	})
 	if a.currentConn != "replica" {
 		t.Errorf("currentConn = %q, want replica", a.currentConn)
 	}

@@ -77,12 +77,18 @@ type App struct {
 	showConnSelector bool
 	connCursor       int
 	gen              int
+	pollerDone       <-chan struct{} // closed when the current poller goroutine exits
 }
 
 func New(poller *core.Poller, currentConn string, connList []ConnectionPreset, reconnectFn ReconnectFn) *App {
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := make(chan core.PollResult, 1)
-	go poller.Run(ctx, ch)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		poller.Run(ctx, ch)
+		close(ch)
+	}()
 	return &App{
 		poller:      poller,
 		pollCh:      ch,
@@ -90,6 +96,7 @@ func New(poller *core.Poller, currentConn string, connList []ConnectionPreset, r
 		currentConn: currentConn,
 		connList:    connList,
 		reconnectFn: reconnectFn,
+		pollerDone:  done,
 	}
 }
 
@@ -99,7 +106,10 @@ func (a *App) Init() tea.Cmd {
 
 func waitForSnapshot(ch <-chan core.PollResult, gen int) tea.Cmd {
 	return func() tea.Msg {
-		r := <-ch
+		r, ok := <-ch
+		if !ok {
+			return nil // channel closed: poller stopped, nothing to dispatch
+		}
 		return snapshotMsg{PollResult: r, gen: gen}
 	}
 }
@@ -123,14 +133,20 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, waitForSnapshot(a.pollCh, a.gen)
 	case connectionSwitchedMsg:
-		a.cancel()
+		a.cancel() // idempotent: doReconnect already called this, safe to repeat
 		ctx, cancel := context.WithCancel(context.Background())
 		ch := make(chan core.PollResult, 1)
-		go msg.poller.Run(ctx, ch)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			msg.poller.Run(ctx, ch)
+			close(ch)
+		}()
 		a.gen++
 		a.poller = msg.poller
 		a.pollCh = ch
 		a.cancel = cancel
+		a.pollerDone = done
 		a.currentConn = msg.name
 		a.showConnSelector = false
 		a.statusMsg = fmt.Sprintf("connected: %s", msg.name)
@@ -256,7 +272,15 @@ func (a *App) handleConnSelectorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (a *App) doReconnect(preset ConnectionPreset) tea.Cmd {
 	fn := a.reconnectFn
+	oldCancel := a.cancel
+	oldDone := a.pollerDone
 	return func() tea.Msg {
+		// Stop the old poller and wait for its goroutine to exit before
+		// calling reconnectFn, which will close the old DB client. This
+		// prevents a data race where the old poller is still mid-query
+		// when the client is closed.
+		oldCancel()
+		<-oldDone
 		ctx := context.Background()
 		p, err := fn(ctx, preset.DSN)
 		if err != nil {
