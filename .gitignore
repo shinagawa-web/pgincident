@@ -1,3 +1,5 @@
 coverage.out
 /pgincident-loadgen
 /pgincident
+.pgincident.toml
+.pgincident.dev.toml

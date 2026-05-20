@@ -35,10 +35,16 @@ type Thresholds struct {
 	IdleInTx    Duration `toml:"idle_in_transaction"`
 }
 
+// Connection holds the DSN for a single named connection preset.
+type Connection struct {
+	DSN string `toml:"dsn"`
+}
+
 // Config is the top-level structure for ~/.pgincident.toml.
 type Config struct {
-	DSN        string     `toml:"dsn"`
-	Thresholds Thresholds `toml:"thresholds"`
+	Connections     map[string]Connection `toml:"connections"`
+	ConnectionOrder []string              `toml:"-"`
+	Thresholds      Thresholds            `toml:"thresholds"`
 }
 
 var defaultThresholds = Thresholds{
@@ -49,7 +55,7 @@ var defaultThresholds = Thresholds{
 // DefaultTOML returns the TOML template written by --init.
 func DefaultTOML() string {
 	return fmt.Sprintf(
-		"dsn = \"postgres://user:password@localhost:5432/mydb\"\n\n[thresholds]\nlong_running        = \"%s\"\nidle_in_transaction = \"%s\"\n",
+		"[connections.default]\ndsn = \"postgres://user:password@localhost:5432/mydb\"\n\n[thresholds]\nlong_running        = \"%s\"\nidle_in_transaction = \"%s\"\n",
 		defaultThresholds.LongRunning.TimeDuration(),
 		defaultThresholds.IdleInTx.TimeDuration(),
 	)
@@ -91,7 +97,31 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("config: %w", err)
 	}
 	if keys := md.Undecoded(); len(keys) > 0 {
+		for _, k := range keys {
+			if len(k) == 1 && k[0] == "dsn" {
+				return nil, fmt.Errorf("config: top-level 'dsn' is no longer supported; use [connections.<name>] instead (see .pgincident.example.toml)")
+			}
+		}
 		return nil, fmt.Errorf("config: unknown keys: %v", keys)
+	}
+	if len(cfg.Connections) == 0 {
+		return nil, fmt.Errorf("config: no connections defined — add a [connections.<name>] section")
+	}
+	for name, conn := range cfg.Connections {
+		if conn.DSN == "" {
+			return nil, fmt.Errorf("config: connection %q has no dsn", name)
+		}
+	}
+	// Populate ConnectionOrder from key parse order (md.Keys preserves file order).
+	seen := make(map[string]bool, len(cfg.Connections))
+	for _, k := range md.Keys() {
+		if len(k) == 2 && k[0] == "connections" {
+			name := k[1]
+			if !seen[name] {
+				cfg.ConnectionOrder = append(cfg.ConnectionOrder, name)
+				seen[name] = true
+			}
+		}
 	}
 	return cfg, nil
 }

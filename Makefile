@@ -7,7 +7,7 @@ build:
 	go build -ldflags "$(LDFLAGS)" -o pgincident ./cmd/pgincident/
 
 run:
-	go run ./cmd/pgincident
+	go run ./cmd/pgincident --config .pgincident.dev.toml
 
 test:
 	env -u DATABASE_URL go test -race -coverprofile=coverage.out -covermode=atomic ./internal/...
@@ -29,10 +29,15 @@ install-hooks:
 
 dev-up:
 	docker compose up -d
-	@echo "waiting for postgres..."
+	@echo "waiting for postgres and postgres-b..."
 	@until docker compose exec postgres pg_isready -q; do sleep 1; done
+	@until docker compose exec postgres-b pg_isready -q; do sleep 1; done
 	docker compose exec -T postgres psql -U postgres < dev/loadgen_setup.sql
-	@echo "ready. DSN: postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres"
+	@printf '[connections.primary]\ndsn = "postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres"\n\n[connections.replica]\ndsn = "postgres://pgincident_dev:pgincident_dev@localhost:5433/postgres"\n\n[thresholds]\nlong_running        = "5s"\nidle_in_transaction = "30s"\n' > .pgincident.dev.toml
+	@echo "ready."
+	@echo "  primary (port 5432): postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres"
+	@echo "  replica (port 5433): postgres://pgincident_dev:pgincident_dev@localhost:5433/postgres"
+	@echo "  config written to .pgincident.dev.toml  (make run to start TUI)"
 
 dev-down:
 	docker compose down

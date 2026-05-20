@@ -178,6 +178,32 @@ func TestServerInfo(t *testing.T) {
 	}
 }
 
+func TestServerInfoStripsOSSuffix(t *testing.T) {
+	conn := &mockConn{
+		queryRowFn: func(_ context.Context, _ string, _ ...any) pgx.Row {
+			return &mockPgxRow{
+				scanFn: func(dest ...any) error {
+					*dest[0].(*string) = "17.10 (Debian 17.10-1.pgdg13+1)"
+					return nil
+				},
+			}
+		},
+	}
+	cfg := &pgx.ConnConfig{}
+	cfg.Host = "localhost"
+	cfg.Port = 5433
+	conn.config = cfg
+
+	c := &Client{conn: conn}
+	version, _, err := c.ServerInfo(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version != "17.10" {
+		t.Errorf("version = %q, want 17.10", version)
+	}
+}
+
 func TestServerInfoError(t *testing.T) {
 	row := &mockPgxRow{
 		scanFn: func(_ ...any) error { return errors.New("query error") },

@@ -1,11 +1,16 @@
 # pgincident configuration file
-# Copy this file to ~/.pgincident.toml and edit as needed.
-# You can also place .pgincident.toml in the current directory;
-# pgincident looks there before falling back to the home directory.
+# Copy this file to .pgincident.toml (project directory) or ~/.pgincident.toml and edit as needed.
+# Run `pgincident --init` to generate a starter file in the current directory.
 
-# PostgreSQL connection string (required).
-# Supports all libpq-compatible DSN formats.
-dsn = "postgres://user:password@localhost:5432/mydb"
+# Define one or more connection presets.
+# pgincident connects to the first one listed on startup.
+# Press `c` in the TUI to switch between connections.
+
+[connections.primary]
+dsn = "postgres://user:password@primary:5432/mydb"
+
+[connections.replica]
+dsn = "postgres://user:password@replica:5432/mydb"
 
 [thresholds]
 # Flag queries running longer than this duration. Default: 5s

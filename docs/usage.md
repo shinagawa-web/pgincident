@@ -15,9 +15,10 @@ pgincident --init
 # Created /your/project/.pgincident.toml
 ```
 
-Then edit the generated file and set your DSN:
+Then edit the generated file and set your DSN. A minimal single-connection config:
 
 ```toml
+[connections.default]
 dsn = "postgres://user:password@localhost:5432/mydb"
 
 [thresholds]
@@ -25,11 +26,25 @@ long_running        = "5s"
 idle_in_transaction = "30s"
 ```
 
-- **`dsn`** — PostgreSQL connection string (required). Supports any libpq-compatible DSN.
+You can define multiple connections and switch between them at runtime:
+
+```toml
+[connections.primary]
+dsn = "postgres://user:password@primary:5432/mydb"
+
+[connections.replica]
+dsn = "postgres://user:password@replica:5432/mydb"
+
+[thresholds]
+long_running        = "5s"
+idle_in_transaction = "30s"
+```
+
+- **`connections.<name>.dsn`** — PostgreSQL connection string for the named preset. Supports any libpq-compatible DSN. At least one `[connections.*]` section is required.
 - **`thresholds.long_running`** — queries exceeding this duration appear in the Long-running section (default: `5s`).
 - **`thresholds.idle_in_transaction`** — sessions exceeding this duration appear in the Idle in transaction section (default: `30s`).
 
-Omitting `[thresholds]` or individual threshold keys keeps the defaults.
+pgincident connects to the first connection defined in the file on startup. Omitting `[thresholds]` or individual threshold keys keeps the defaults.
 
 To use a different config file, pass `--config`:
 
@@ -67,7 +82,7 @@ A global health summary. Shows key metrics with status badges:
 If a metric shows **WARN** or **CRIT**, press `o` to switch to the Dashboard and investigate.
 
 ```
-pgincident v0.1.3      connected: 10.0.1.42:5432 (PG 16.1)  interval: 5.0s
+primary  10.0.1.42:5432  PG 16.1                              interval: 5.0s
 ──────────────────────────────────────────────────────────────────────────
   DB Health Overview
 ──────────────────────────────────────────────────────────────────────────
@@ -93,7 +108,7 @@ Per-category incident view with three sections. Each section auto-refreshes at t
 - **Idle in transaction** — sessions holding an open transaction beyond the threshold (default 30 s)
 
 ```
-pgincident v0.1.3      connected: 10.0.1.42:5432 (PG 16.1)  interval: 5.0s
+primary  10.0.1.42:5432  PG 16.1                              interval: 5.0s
 Connections: 142/200 (71%)   TPS: 2340   Cache hit: 99.2%
 ──────────────────────────────────────────────────────────────────────────
 ▶ Long-running queries (> 5s)                               [1 active]
@@ -128,6 +143,27 @@ Press `Enter` on a row in the Long-running queries section to open the full SQL.
 [any key] close
 ```
 
+## Connection switching
+
+When multiple connections are defined in the config, press `c` on any screen to open the connection selector overlay.
+
+```
+        Select Connection
+
+      ▶ primary  (current)
+        replica
+
+        [↑↓/jk] move  [Enter] connect  [Esc/c/q] cancel
+```
+
+Navigate with `↑`/`↓` (or `j`/`k`), then press `Enter` to switch. The title bar updates immediately to show the new connection name and PG version:
+
+```
+replica  10.0.1.42:5433  PG 17.10                             interval: 5.0s
+```
+
+**Only one database is connected at any time.** Switching closes the existing connection before opening the new one, so there is no background polling against inactive databases.
+
 ## Key bindings
 
 ### Overview screen
@@ -136,6 +172,7 @@ Press `Enter` on a row in the Long-running queries section to open the full SQL.
 |---|---|
 | `o` | Switch to Dashboard |
 | `+` / `-` | Increase / decrease refresh interval |
+| `c` | Open connection selector (only shown when multiple connections are defined) |
 | `?` | Help overlay |
 | `q` / `Ctrl-C` | Quit |
 
@@ -150,8 +187,18 @@ Press `Enter` on a row in the Long-running queries section to open the full SQL.
 | `↓` / `j` | Move cursor down |
 | `Enter` | Open query detail overlay (Long-running queries only) |
 | `+` / `-` | Increase / decrease refresh interval |
+| `c` | Open connection selector (only shown when multiple connections are defined) |
 | `?` | Help overlay |
 | `q` / `Ctrl-C` | Quit |
+
+### Connection selector overlay
+
+| Key | Action |
+|---|---|
+| `↑` / `k` | Move cursor up |
+| `↓` / `j` | Move cursor down |
+| `Enter` | Connect to selected connection |
+| `Esc` / `c` / `q` | Cancel and close |
 
 ### Query detail overlay
 

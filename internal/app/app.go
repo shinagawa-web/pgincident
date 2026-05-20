@@ -37,11 +37,11 @@ func defaultNewPoller(client dbClient, interval time.Duration) *core.Poller {
 
 var (
 	connectFn     func(ctx context.Context, dsn string) (dbClient, error) = defaultConnect
-	runFn         func(tea.Model) error                                    = defaultRun
-	newPollerFn   func(dbClient, time.Duration) *core.Poller               = defaultNewPoller
-	resolvePathFn  = config.ResolvePath
-	getWdFn        = os.Getwd
-	initPathFn     = func() (string, error) {
+	runFn         func(tea.Model) error                                   = defaultRun
+	newPollerFn   func(dbClient, time.Duration) *core.Poller              = defaultNewPoller
+	resolvePathFn                                                         = config.ResolvePath
+	getWdFn                                                               = os.Getwd
+	initPathFn                                                            = func() (string, error) {
 		cwd, err := getWdFn()
 		if err != nil {
 			return "", err
@@ -115,21 +115,40 @@ func Run(cfgPath string) error {
 		return err
 	}
 
-	if cfg.DSN == "" {
-		return fmt.Errorf("no DSN configured — set 'dsn' in %s", resolved)
-	}
-
+	firstConn := cfg.Connections[cfg.ConnectionOrder[0]]
 	ctx := context.Background()
 
-	client, err := connectFn(ctx, cfg.DSN)
+	client, err := connectFn(ctx, firstConn.DSN)
 	if err != nil {
 		return err
 	}
-	defer client.Close(ctx)
 
 	poller := newPollerFn(client, 5*time.Second)
 	poller.LongRunningThreshold = cfg.Thresholds.LongRunning.TimeDuration()
 	poller.IdleInTxThreshold = cfg.Thresholds.IdleInTx.TimeDuration()
 
-	return runFn(tui.New(poller))
+	// Build connection preset list for the TUI switcher.
+	presets := make([]tui.ConnectionPreset, len(cfg.ConnectionOrder))
+	for i, name := range cfg.ConnectionOrder {
+		presets[i] = tui.ConnectionPreset{Name: name, DSN: cfg.Connections[name].DSN}
+	}
+
+	defer func() { client.Close(ctx) }()
+
+	return runFn(tui.New(poller, cfg.ConnectionOrder[0], presets, buildReconnect(&client, poller)))
+}
+
+func buildReconnect(clientPtr *dbClient, pol *core.Poller) tui.ReconnectFn {
+	return func(rctx context.Context, dsn string) (*core.Poller, error) {
+		newClient, err := connectFn(rctx, dsn)
+		if err != nil {
+			return nil, err
+		}
+		(*clientPtr).Close(rctx)
+		*clientPtr = newClient
+		p := newPollerFn(*clientPtr, pol.Interval())
+		p.LongRunningThreshold = pol.LongRunningThreshold
+		p.IdleInTxThreshold = pol.IdleInTxThreshold
+		return p, nil
+	}
 }

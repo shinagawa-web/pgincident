@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -13,13 +14,16 @@ import (
 
 func newTestApp() *App {
 	_, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	close(done) // pre-closed: simulates a stopped poller goroutine
 	return &App{
-		poller: core.NewPoller(nil, time.Second),
-		pollCh: make(chan core.PollResult, 1),
-		cancel: cancel,
-		width:  100,
-		height: 30,
-		screen: ScreenDashboard, // most tests target Dashboard behavior
+		poller:     core.NewPoller(nil, time.Second),
+		pollCh:     make(chan core.PollResult, 1),
+		cancel:     cancel,
+		width:      100,
+		height:     30,
+		screen:     ScreenDashboard, // most tests target Dashboard behavior
+		pollerDone: done,
 	}
 }
 
@@ -28,7 +32,7 @@ func newTestApp() *App {
 func TestWaitForSnapshot(t *testing.T) {
 	ch := make(chan core.PollResult, 1)
 	ch <- core.PollResult{Snapshot: core.Snapshot{PGVersion: "16.1"}}
-	msg := waitForSnapshot(ch)()
+	msg := waitForSnapshot(ch, 0)()
 	r, ok := msg.(snapshotMsg)
 	if !ok {
 		t.Fatal("expected snapshotMsg")
@@ -41,13 +45,22 @@ func TestWaitForSnapshot(t *testing.T) {
 func TestWaitForSnapshotError(t *testing.T) {
 	ch := make(chan core.PollResult, 1)
 	ch <- core.PollResult{Err: errors.New("db down")}
-	msg := waitForSnapshot(ch)()
+	msg := waitForSnapshot(ch, 0)()
 	r, ok := msg.(snapshotMsg)
 	if !ok {
 		t.Fatal("expected snapshotMsg")
 	}
 	if r.Err == nil {
 		t.Error("expected error in snapshotMsg")
+	}
+}
+
+func TestWaitForSnapshotChannelClosed(t *testing.T) {
+	ch := make(chan core.PollResult)
+	close(ch)
+	msg := waitForSnapshot(ch, 0)()
+	if msg != nil {
+		t.Errorf("expected nil when channel closed, got %T", msg)
 	}
 }
 
@@ -171,8 +184,8 @@ func TestViewTooSmall(t *testing.T) {
 func TestViewNormal(t *testing.T) {
 	app := newTestApp()
 	v := app.View()
-	if !strings.Contains(v, "pgincident") {
-		t.Errorf("expected pgincident in view, got: %q", v)
+	if !strings.Contains(v, "interval:") {
+		t.Errorf("expected interval in title bar, got: %q", v)
 	}
 	if !strings.Contains(v, "Long-running queries") {
 		t.Errorf("expected activity section in view, got: %q", v)
@@ -202,7 +215,7 @@ func TestUpdateWindowSize(t *testing.T) {
 func TestUpdateSnapshot(t *testing.T) {
 	app := newTestApp()
 	snap := core.Snapshot{PGVersion: "16.1"}
-	model, cmd := app.Update(snapshotMsg{Snapshot: snap})
+	model, cmd := app.Update(snapshotMsg{PollResult: core.PollResult{Snapshot: snap}})
 	a := model.(*App)
 	if a.snapshot.PGVersion != "16.1" {
 		t.Errorf("PGVersion = %q, want 16.1", a.snapshot.PGVersion)
@@ -214,10 +227,24 @@ func TestUpdateSnapshot(t *testing.T) {
 
 func TestUpdateSnapshotError(t *testing.T) {
 	app := newTestApp()
-	model, _ := app.Update(snapshotMsg{Err: errors.New("db down")})
+	model, _ := app.Update(snapshotMsg{PollResult: core.PollResult{Err: errors.New("db down")}})
 	a := model.(*App)
 	if a.lastErr == nil {
 		t.Error("expected lastErr to be set")
+	}
+}
+
+func TestUpdateSnapshotStaleGen(t *testing.T) {
+	app := newTestApp()
+	app.gen = 2
+	snap := core.Snapshot{PGVersion: "stale"}
+	model, cmd := app.Update(snapshotMsg{PollResult: core.PollResult{Snapshot: snap}, gen: 1})
+	a := model.(*App)
+	if a.snapshot.PGVersion == "stale" {
+		t.Error("stale snapshotMsg should be dropped")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd for stale snapshotMsg")
 	}
 }
 
@@ -583,6 +610,18 @@ func TestViewOverview(t *testing.T) {
 	if !strings.Contains(v, "[o]dashboard") {
 		t.Errorf("expected overview footer hint, got: %q", v)
 	}
+	if strings.Contains(v, "[c]connections") {
+		t.Errorf("unexpected [c]connections in overview footer for single conn, got: %q", v)
+	}
+}
+
+func TestViewOverviewFooterMultiConn(t *testing.T) {
+	app := newMultiConnApp()
+	app.screen = ScreenOverview
+	v := app.View()
+	if !strings.Contains(v, "[c]connections") {
+		t.Errorf("expected [c]connections in overview footer for multi-conn, got: %q", v)
+	}
 }
 
 func TestViewOverviewNoReplicationRowWhenNoStandbys(t *testing.T) {
@@ -641,7 +680,7 @@ func TestViewOverviewStatusBadges(t *testing.T) {
 
 func TestNewDefaultsToOverview(t *testing.T) {
 	poller := core.NewPoller(&mockQuerier{}, time.Second)
-	app := New(poller)
+	app := New(poller, "default", []ConnectionPreset{{Name: "default", DSN: "postgres://x"}}, nil)
 	if app.screen != ScreenOverview {
 		t.Errorf("New() screen = %v, want ScreenOverview", app.screen)
 	}
@@ -655,7 +694,7 @@ const overflowQuery = "WITH paused AS (SELECT pg_sleep(60)) SELECT a.pid, a.usen
 
 func detailApp() *App {
 	app := newTestApp() // width=100
-	app.height = 24    // sqlRows = 20; overflowQuery overflows at this height
+	app.height = 24     // sqlRows = 20; overflowQuery overflows at this height
 	act := core.Activity{PID: 5000, Query: overflowQuery}
 	app.showDetail = true
 	app.detailItem = &act
@@ -776,6 +815,7 @@ func TestViewDetailNoScrollFooter(t *testing.T) {
 		t.Errorf("unexpected scroll footer for short SQL, got: %q", v)
 	}
 }
+
 // --- New ---
 
 type mockQuerier struct{}
@@ -786,7 +826,7 @@ func (m *mockQuerier) ServerInfo(_ context.Context) (string, string, error) {
 func (m *mockQuerier) LongRunning(_ context.Context, _ time.Duration) ([]core.Activity, error) {
 	return nil, nil
 }
-func (m *mockQuerier) Locks(_ context.Context) ([]core.Lock, error)  { return nil, nil }
+func (m *mockQuerier) Locks(_ context.Context) ([]core.Lock, error) { return nil, nil }
 func (m *mockQuerier) IdleInTx(_ context.Context, _ time.Duration) ([]core.Activity, error) {
 	return nil, nil
 }
@@ -796,14 +836,25 @@ func (m *mockQuerier) Stats(_ context.Context) (core.DBStats, error) {
 
 func TestNew(t *testing.T) {
 	poller := core.NewPoller(&mockQuerier{}, time.Second)
-	app := New(poller)
+	presets := []ConnectionPreset{{Name: "primary", DSN: "postgres://x"}}
+	app := New(poller, "primary", presets, nil)
 	if app.poller == nil {
 		t.Error("expected poller to be set")
 	}
 	if app.pollCh == nil {
 		t.Error("expected pollCh to be set")
 	}
+	if app.currentConn != "primary" {
+		t.Errorf("currentConn = %q, want primary", app.currentConn)
+	}
+	if len(app.connList) != 1 {
+		t.Errorf("len(connList) = %d, want 1", len(app.connList))
+	}
+	if app.pollerDone == nil {
+		t.Error("expected pollerDone to be set")
+	}
 	app.cancel()
+	<-app.pollerDone // confirm goroutine exits after cancel
 }
 
 // --- clampScroll ---
@@ -958,6 +1009,250 @@ func TestRenderDetailStartBeyondTotal(t *testing.T) {
 	v := app.View()
 	if !strings.Contains(v, "7000") {
 		t.Errorf("expected PID in detail view with out-of-range scroll, got: %q", v)
+	}
+}
+
+// --- connection selector ---
+
+func newMultiConnApp() *App {
+	app := newTestApp()
+	app.connList = []ConnectionPreset{
+		{Name: "primary", DSN: "postgres://p@localhost/db"},
+		{Name: "replica", DSN: "postgres://r@localhost/db"},
+	}
+	app.currentConn = "primary"
+	app.reconnectFn = nil
+	return app
+}
+
+func TestHandleKeyCOpensSelector(t *testing.T) {
+	app := newMultiConnApp()
+	model, _ := app.handleKey(key("c"))
+	a := model.(*App)
+	if !a.showConnSelector {
+		t.Error("expected showConnSelector=true after c key")
+	}
+	if a.connCursor != 0 {
+		t.Errorf("connCursor = %d, want 0 (index of primary)", a.connCursor)
+	}
+}
+
+func TestHandleKeyCNoOpSingleConn(t *testing.T) {
+	app := newTestApp()
+	app.connList = []ConnectionPreset{{Name: "only", DSN: "postgres://x"}}
+	app.currentConn = "only"
+	model, _ := app.handleKey(key("c"))
+	a := model.(*App)
+	if a.showConnSelector {
+		t.Error("expected showConnSelector=false when only one connection")
+	}
+}
+
+func TestConnSelectorUp(t *testing.T) {
+	app := newMultiConnApp()
+	app.showConnSelector = true
+	app.connCursor = 1
+	model, _ := app.handleKey(tea.KeyMsg{Type: tea.KeyUp})
+	a := model.(*App)
+	if a.connCursor != 0 {
+		t.Errorf("connCursor = %d, want 0 after Up", a.connCursor)
+	}
+}
+
+func TestConnSelectorDown(t *testing.T) {
+	app := newMultiConnApp()
+	app.showConnSelector = true
+	app.connCursor = 0
+	model, _ := app.handleKey(key("j"))
+	a := model.(*App)
+	if a.connCursor != 1 {
+		t.Errorf("connCursor = %d, want 1 after j", a.connCursor)
+	}
+}
+
+func TestConnSelectorUpAtTop(t *testing.T) {
+	app := newMultiConnApp()
+	app.showConnSelector = true
+	app.connCursor = 0
+	model, _ := app.handleKey(key("k"))
+	a := model.(*App)
+	if a.connCursor != 0 {
+		t.Errorf("connCursor = %d, want 0 (already at top)", a.connCursor)
+	}
+}
+
+func TestConnSelectorDownAtBottom(t *testing.T) {
+	app := newMultiConnApp()
+	app.showConnSelector = true
+	app.connCursor = 1 // already at last
+	model, _ := app.handleKey(key("j"))
+	a := model.(*App)
+	if a.connCursor != 1 {
+		t.Errorf("connCursor = %d, want 1 (already at bottom)", a.connCursor)
+	}
+}
+
+func TestConnSelectorEscCloses(t *testing.T) {
+	app := newMultiConnApp()
+	app.showConnSelector = true
+	model, _ := app.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	a := model.(*App)
+	if a.showConnSelector {
+		t.Error("expected showConnSelector=false after Esc")
+	}
+}
+
+func TestConnSelectorCCloses(t *testing.T) {
+	app := newMultiConnApp()
+	app.showConnSelector = true
+	model, _ := app.handleKey(key("c"))
+	a := model.(*App)
+	if a.showConnSelector {
+		t.Error("expected showConnSelector=false after c in selector")
+	}
+}
+
+func TestConnSelectorQCloses(t *testing.T) {
+	app := newMultiConnApp()
+	app.showConnSelector = true
+	model, _ := app.handleKey(key("q"))
+	a := model.(*App)
+	if a.showConnSelector {
+		t.Error("expected showConnSelector=false after q in selector")
+	}
+}
+
+func TestConnSelectorEnterSameConn(t *testing.T) {
+	app := newMultiConnApp()
+	app.showConnSelector = true
+	app.connCursor = 0 // primary is current
+	model, cmd := app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	a := model.(*App)
+	if a.showConnSelector {
+		t.Error("expected showConnSelector=false after Enter on current conn")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd when selecting already-current connection")
+	}
+}
+
+func TestConnSelectorEnterDifferentConn(t *testing.T) {
+	app := newMultiConnApp()
+	app.showConnSelector = true
+	app.connCursor = 1 // replica
+	reconnected := false
+	app.reconnectFn = func(_ context.Context, dsn string) (*core.Poller, error) {
+		reconnected = true
+		p := core.NewPoller(&mockQuerier{}, time.Second)
+		return p, nil
+	}
+	_, cmd := app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd for switching to different connection")
+	}
+	msg := cmd()
+	if !reconnected {
+		t.Error("expected reconnectFn to be called")
+	}
+	switched, ok := msg.(connectionSwitchedMsg)
+	if !ok {
+		t.Fatalf("expected connectionSwitchedMsg, got %T", msg)
+	}
+	if switched.name != "replica" {
+		t.Errorf("switched.name = %q, want replica", switched.name)
+	}
+}
+
+func TestConnSelectorReconnectError(t *testing.T) {
+	app := newMultiConnApp()
+	app.showConnSelector = true
+	app.connCursor = 1 // replica
+	app.reconnectFn = func(_ context.Context, _ string) (*core.Poller, error) {
+		return nil, fmt.Errorf("connection refused")
+	}
+	_, cmd := app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	errMsg, ok := msg.(reconnectErrMsg)
+	if !ok {
+		t.Fatalf("expected reconnectErrMsg, got %T", msg)
+	}
+	if errMsg.err == nil || errMsg.err.Error() != "connection refused" {
+		t.Errorf("err = %v, want connection refused", errMsg.err)
+	}
+}
+
+func TestUpdateConnectionSwitched(t *testing.T) {
+	app := newTestApp()
+	newPoller := core.NewPoller(&mockQuerier{}, 2*time.Second)
+	model, cmd := app.Update(connectionSwitchedMsg{poller: newPoller, name: "replica"})
+	a := model.(*App)
+	t.Cleanup(func() {
+		a.cancel()
+		<-a.pollerDone // confirm goroutine exits after cancel
+	})
+	if a.currentConn != "replica" {
+		t.Errorf("currentConn = %q, want replica", a.currentConn)
+	}
+	if a.showConnSelector {
+		t.Error("expected showConnSelector=false after switch")
+	}
+	if a.gen != 1 {
+		t.Errorf("gen = %d, want 1 after switch", a.gen)
+	}
+	if cmd == nil {
+		t.Error("expected waitForSnapshot cmd after switch")
+	}
+}
+
+func TestUpdateReconnectErr(t *testing.T) {
+	app := newTestApp()
+	model, cmd := app.Update(reconnectErrMsg{err: fmt.Errorf("timeout")})
+	a := model.(*App)
+	if a.lastErr == nil || a.lastErr.Error() != "timeout" {
+		t.Errorf("lastErr = %v, want timeout", a.lastErr)
+	}
+	if a.showConnSelector {
+		t.Error("expected showConnSelector=false on reconnect error")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd on reconnect error")
+	}
+}
+
+func TestViewConnSelector(t *testing.T) {
+	app := newMultiConnApp()
+	app.showConnSelector = true
+	v := app.View()
+	if !strings.Contains(v, "Select Connection") {
+		t.Errorf("expected Select Connection in view, got: %q", v)
+	}
+	if !strings.Contains(v, "primary") {
+		t.Errorf("expected primary in selector view, got: %q", v)
+	}
+	if !strings.Contains(v, "replica") {
+		t.Errorf("expected replica in selector view, got: %q", v)
+	}
+}
+
+func TestRenderHelpWithConnections(t *testing.T) {
+	app := newMultiConnApp()
+	app.showHelp = true
+	v := app.View()
+	if !strings.Contains(v, "connection selector") {
+		t.Errorf("expected connection selector hint in help when multiConn, got: %q", v)
+	}
+}
+
+func TestRenderHelpWithoutConnections(t *testing.T) {
+	app := newTestApp()
+	app.connList = []ConnectionPreset{{Name: "only", DSN: "postgres://x"}}
+	app.showHelp = true
+	v := app.View()
+	if strings.Contains(v, "connection selector") {
+		t.Errorf("unexpected connection selector hint in help when single conn, got: %q", v)
 	}
 }
 

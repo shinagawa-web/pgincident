@@ -17,7 +17,28 @@ const (
 	minHeight = 24
 )
 
-type snapshotMsg core.PollResult
+// ConnectionPreset holds a named DSN for the connection selector.
+type ConnectionPreset struct {
+	Name string
+	DSN  string
+}
+
+// ReconnectFn connects to the given DSN and returns a new Poller.
+type ReconnectFn func(ctx context.Context, dsn string) (*core.Poller, error)
+
+type snapshotMsg struct {
+	core.PollResult
+	gen int
+}
+
+type connectionSwitchedMsg struct {
+	poller *core.Poller
+	name   string
+}
+
+type reconnectErrMsg struct {
+	err error
+}
 
 // Screen identifies which top-level screen is active.
 type Screen int
@@ -29,44 +50,68 @@ const (
 
 // App is the root Bubble Tea model.
 type App struct {
-	poller       *core.Poller
-	pollCh       chan core.PollResult
-	cancel       context.CancelFunc
-	snapshot     core.Snapshot
-	screen       Screen
-	section      Section
-	cursor       [sectionCount]int
-	width        int
-	height       int
-	lastErr      error
-	statusMsg    string
+	poller           *core.Poller
+	pollCh           chan core.PollResult
+	cancel           context.CancelFunc
+	snapshot         core.Snapshot
+	screen           Screen
+	section          Section
+	cursor           [sectionCount]int
+	width            int
+	height           int
+	lastErr          error
+	statusMsg        string
 	showHelp         bool
 	showDetail       bool
 	detailItem       *core.Activity
 	detailScroll     int
-	detailLines      []string       // cached formatted lines; valid when detailLinesItem == detailItem && detailLinesWidth == width
+	detailLines      []string // cached formatted lines; valid when detailLinesItem == detailItem && detailLinesWidth == width
 	detailLinesItem  *core.Activity
 	detailLinesWidth int
 	quitting         bool
+
+	// connection switching
+	connList         []ConnectionPreset
+	currentConn      string
+	reconnectFn      ReconnectFn
+	showConnSelector bool
+	connCursor       int
+	gen              int
+	pollerDone       <-chan struct{} // closed when the current poller goroutine exits
 }
 
-func New(poller *core.Poller) *App {
+func New(poller *core.Poller, currentConn string, connList []ConnectionPreset, reconnectFn ReconnectFn) *App {
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := make(chan core.PollResult, 1)
-	go poller.Run(ctx, ch)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		poller.Run(ctx, ch)
+		close(ch)
+	}()
 	return &App{
-		poller: poller,
-		pollCh: ch,
-		cancel: cancel,
+		poller:      poller,
+		pollCh:      ch,
+		cancel:      cancel,
+		currentConn: currentConn,
+		connList:    connList,
+		reconnectFn: reconnectFn,
+		pollerDone:  done,
 	}
 }
 
 func (a *App) Init() tea.Cmd {
-	return waitForSnapshot(a.pollCh)
+	return waitForSnapshot(a.pollCh, a.gen)
 }
 
-func waitForSnapshot(ch <-chan core.PollResult) tea.Cmd {
-	return func() tea.Msg { return snapshotMsg(<-ch) }
+func waitForSnapshot(ch <-chan core.PollResult, gen int) tea.Cmd {
+	return func() tea.Msg {
+		r, ok := <-ch
+		if !ok {
+			return nil // channel closed: poller stopped, nothing to dispatch
+		}
+		return snapshotMsg{PollResult: r, gen: gen}
+	}
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -77,13 +122,39 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.detailScroll = a.clampScroll(a.detailScroll)
 		}
 	case snapshotMsg:
+		if msg.gen != a.gen {
+			return a, nil
+		}
 		if msg.Err != nil {
 			a.lastErr = msg.Err
 		} else {
 			a.snapshot = msg.Snapshot
 			a.lastErr = nil
 		}
-		return a, waitForSnapshot(a.pollCh)
+		return a, waitForSnapshot(a.pollCh, a.gen)
+	case connectionSwitchedMsg:
+		a.cancel() // idempotent: doReconnect already called this, safe to repeat
+		ctx, cancel := context.WithCancel(context.Background())
+		ch := make(chan core.PollResult, 1)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			msg.poller.Run(ctx, ch)
+			close(ch)
+		}()
+		a.gen++
+		a.poller = msg.poller
+		a.pollCh = ch
+		a.cancel = cancel
+		a.pollerDone = done
+		a.currentConn = msg.name
+		a.showConnSelector = false
+		a.statusMsg = fmt.Sprintf("connected: %s", msg.name)
+		return a, waitForSnapshot(a.pollCh, a.gen)
+	case reconnectErrMsg:
+		a.lastErr = msg.err
+		a.showConnSelector = false
+		return a, nil
 	case tea.KeyMsg:
 		return a.handleKey(msg)
 	}
@@ -91,6 +162,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if a.showConnSelector {
+		return a.handleConnSelectorKey(msg)
+	}
 	if a.showDetail {
 		if a.detailItem == nil {
 			a.showDetail = false
@@ -128,6 +202,16 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a, tea.Quit
 	case "?":
 		a.showHelp = true
+	case "c":
+		if len(a.connList) > 1 {
+			a.showConnSelector = true
+			for i, p := range a.connList {
+				if p.Name == a.currentConn {
+					a.connCursor = i
+					break
+				}
+			}
+		}
 	case "o":
 		if a.screen == ScreenOverview {
 			a.screen = ScreenDashboard
@@ -161,6 +245,49 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return a, nil
+}
+
+func (a *App) handleConnSelectorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "up", "k":
+		if a.connCursor > 0 {
+			a.connCursor--
+		}
+	case "down", "j":
+		if a.connCursor < len(a.connList)-1 {
+			a.connCursor++
+		}
+	case "enter":
+		selected := a.connList[a.connCursor]
+		if selected.Name == a.currentConn {
+			a.showConnSelector = false
+			return a, nil
+		}
+		return a, a.doReconnect(selected)
+	case "esc", "c", "q":
+		a.showConnSelector = false
+	}
+	return a, nil
+}
+
+func (a *App) doReconnect(preset ConnectionPreset) tea.Cmd {
+	fn := a.reconnectFn
+	oldCancel := a.cancel
+	oldDone := a.pollerDone
+	return func() tea.Msg {
+		// Stop the old poller and wait for its goroutine to exit before
+		// calling reconnectFn, which will close the old DB client. This
+		// prevents a data race where the old poller is still mid-query
+		// when the client is closed.
+		oldCancel()
+		<-oldDone
+		ctx := context.Background()
+		p, err := fn(ctx, preset.DSN)
+		if err != nil {
+			return reconnectErrMsg{err: err}
+		}
+		return connectionSwitchedMsg{poller: p, name: preset.Name}
+	}
 }
 
 func (a *App) selectedActivity() *core.Activity {
@@ -227,6 +354,9 @@ func (a *App) View() string {
 			warnStyle.Render(msg))
 	}
 
+	if a.showConnSelector {
+		return a.renderConnSelector()
+	}
 	if a.showDetail && a.detailItem != nil {
 		return a.renderDetail()
 	}
@@ -242,7 +372,7 @@ func (a *App) View() string {
 	dr := a.sectionDataRows()
 
 	parts := []string{
-		renderTitleBar(a.snapshot, a.poller.Interval(), a.width),
+		renderTitleBar(a.snapshot, a.poller.Interval(), a.currentConn, a.width),
 		renderStatsBar(a.snapshot.DBStats, a.width),
 		div,
 		renderActivitySection(a.snapshot.Activities, a.cursor[SectionActivity], a.section == SectionActivity, dr, a.width, a.poller.LongRunningThreshold),
@@ -252,7 +382,7 @@ func (a *App) View() string {
 		renderIdleSection(a.snapshot.IdleInTx, a.cursor[SectionIdle], a.section == SectionIdle, dr, a.width, a.poller.IdleInTxThreshold),
 		div,
 		renderStatus(a.lastErr, a.statusMsg),
-		renderFooter(),
+		renderFooter(len(a.connList) > 1),
 	}
 
 	return strings.Join(parts, "\n")
@@ -290,6 +420,10 @@ func (a *App) clampScroll(offset int) int {
 }
 
 func (a *App) renderHelp() string {
+	connLine := ""
+	if len(a.connList) > 1 {
+		connLine = "  c             connection selector\n"
+	}
 	content := boldStyle.Render("pgincident v"+version.Version) + "\n\n" +
 		"  q / Ctrl-C    quit\n" +
 		"  o             overview / dashboard toggle\n" +
@@ -299,6 +433,7 @@ func (a *App) renderHelp() string {
 		"  ↓ / j         cursor down\n" +
 		"  Enter         query detail overlay (dashboard only)\n" +
 		"  + / -         increase / decrease interval\n" +
+		connLine +
 		"  ?             this help\n\n" +
 		dimStyle.Render("press any key to close")
 	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
@@ -349,4 +484,28 @@ func (a *App) renderDetail() string {
 		footer,
 	}
 	return strings.Join(parts, "\n")
+}
+
+func (a *App) renderConnSelector() string {
+	var lines []string
+	lines = append(lines, boldStyle.Render("Select Connection"))
+	lines = append(lines, "")
+	for i, p := range a.connList {
+		marker := "  "
+		line := p.Name
+		if p.Name == a.currentConn {
+			line += dimStyle.Render(" (current)")
+		}
+		if i == a.connCursor {
+			marker = "▶ "
+			line = activeTitleStyle.Render(line)
+		}
+		lines = append(lines, marker+line)
+	}
+	lines = append(lines, "")
+	lines = append(lines, dimStyle.Render("[↑↓/jk] move  [Enter] connect  [Esc/c/q] cancel"))
+
+	content := strings.Join(lines, "\n")
+	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
+		modalStyle.Render(content))
 }
