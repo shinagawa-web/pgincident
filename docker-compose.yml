@@ -10,7 +10,7 @@ services:
       - ./dev/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   postgres-b:
-    image: postgres:16
+    image: postgres:17
     command: postgres -c track_activity_query_size=65536
     environment:
       POSTGRES_PASSWORD: postgres
