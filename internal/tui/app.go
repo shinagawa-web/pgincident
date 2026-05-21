@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -26,6 +27,9 @@ type ConnectionPreset struct {
 // ReconnectFn connects to the given DSN and returns a new Poller.
 type ReconnectFn func(ctx context.Context, dsn string) (*core.Poller, error)
 
+// FallbackFn creates a new Poller for the current connection, used when a connection switch fails.
+type FallbackFn func(interval time.Duration, lr, idle time.Duration) *core.Poller
+
 type snapshotMsg struct {
 	core.PollResult
 	gen int
@@ -37,7 +41,15 @@ type connectionSwitchedMsg struct {
 }
 
 type reconnectErrMsg struct {
-	err error
+	err      error
+	fallback *core.Poller // non-nil: restart polling the old connection
+}
+
+type autoReconnectResultMsg struct {
+	seq     int
+	attempt int
+	poller  *core.Poller // non-nil on success
+	err     error        // non-nil on failure
 }
 
 // Screen identifies which top-level screen is active.
@@ -74,13 +86,18 @@ type App struct {
 	connList         []ConnectionPreset
 	currentConn      string
 	reconnectFn      ReconnectFn
+	fallbackFn       FallbackFn
 	showConnSelector bool
 	connCursor       int
 	gen              int
 	pollerDone       <-chan struct{} // closed when the current poller goroutine exits
+
+	// auto-reconnect state
+	autoReconnecting bool
+	autoReconnectSeq int
 }
 
-func New(poller *core.Poller, currentConn string, connList []ConnectionPreset, reconnectFn ReconnectFn) *App {
+func New(poller *core.Poller, currentConn string, connList []ConnectionPreset, reconnectFn ReconnectFn, fallbackFn FallbackFn) *App {
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := make(chan core.PollResult, 1)
 	done := make(chan struct{})
@@ -96,6 +113,7 @@ func New(poller *core.Poller, currentConn string, connList []ConnectionPreset, r
 		currentConn: currentConn,
 		connList:    connList,
 		reconnectFn: reconnectFn,
+		fallbackFn:  fallbackFn,
 		pollerDone:  done,
 	}
 }
@@ -126,7 +144,24 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		if msg.Err != nil {
-			a.lastErr = msg.Err
+			a.lastErr = sanitizeErr(msg.Err)
+			if !a.autoReconnecting && isConnError(msg.Err) && a.reconnectFn != nil {
+				if dsn := a.dsnForCurrentConn(); dsn != "" {
+					a.autoReconnecting = true
+					a.autoReconnectSeq++
+					seq := a.autoReconnectSeq
+					a.lastErr = nil
+					a.statusMsg = "reconnecting…"
+					a.cancel() // stop the broken poller
+					oldDone := a.pollerDone
+					fn := a.reconnectFn
+					return a, func() tea.Msg {
+						<-oldDone
+						p, err := fn(context.Background(), dsn)
+						return autoReconnectResultMsg{seq: seq, attempt: 1, poller: p, err: err}
+					}
+				}
+			}
 		} else {
 			a.snapshot = msg.Snapshot
 			a.lastErr = nil
@@ -134,27 +169,40 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, waitForSnapshot(a.pollCh, a.gen)
 	case connectionSwitchedMsg:
 		a.cancel() // idempotent: doReconnect already called this, safe to repeat
-		ctx, cancel := context.WithCancel(context.Background())
-		ch := make(chan core.PollResult, 1)
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			msg.poller.Run(ctx, ch)
-			close(ch)
-		}()
-		a.gen++
-		a.poller = msg.poller
-		a.pollCh = ch
-		a.cancel = cancel
-		a.pollerDone = done
+		a.autoReconnecting = false
+		a.autoReconnectSeq++ // invalidate any in-flight auto-reconnect
+		cmd := a.startPollerWith(msg.poller)
 		a.currentConn = msg.name
 		a.showConnSelector = false
 		a.statusMsg = fmt.Sprintf("connected: %s", msg.name)
-		return a, waitForSnapshot(a.pollCh, a.gen)
+		return a, cmd
 	case reconnectErrMsg:
-		a.lastErr = msg.err
+		a.lastErr = sanitizeErr(msg.err)
 		a.showConnSelector = false
+		if msg.fallback != nil {
+			return a, a.startPollerWith(msg.fallback)
+		}
 		return a, nil
+	case autoReconnectResultMsg:
+		if msg.seq != a.autoReconnectSeq {
+			return a, nil // stale result from a superseded reconnect attempt
+		}
+		if msg.err != nil {
+			delay := reconnectBackoff(msg.attempt)
+			a.statusMsg = fmt.Sprintf("reconnecting… (attempt %d)", msg.attempt+1)
+			seq := a.autoReconnectSeq
+			fn := a.reconnectFn
+			dsn := a.dsnForCurrentConn()
+			return a, func() tea.Msg {
+				time.Sleep(delay)
+				p, err := fn(context.Background(), dsn)
+				return autoReconnectResultMsg{seq: seq, attempt: msg.attempt + 1, poller: p, err: err}
+			}
+		}
+		a.autoReconnecting = false
+		a.lastErr = nil
+		a.statusMsg = fmt.Sprintf("reconnected: %s", a.currentConn)
+		return a, a.startPollerWith(msg.poller)
 	case tea.KeyMsg:
 		return a.handleKey(msg)
 	}
@@ -263,6 +311,9 @@ func (a *App) handleConnSelectorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.showConnSelector = false
 			return a, nil
 		}
+		// Cancel any in-flight auto-reconnect so its result is ignored.
+		a.autoReconnecting = false
+		a.autoReconnectSeq++
 		return a, a.doReconnect(selected)
 	case "esc", "c", "q":
 		a.showConnSelector = false
@@ -272,6 +323,8 @@ func (a *App) handleConnSelectorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (a *App) doReconnect(preset ConnectionPreset) tea.Cmd {
 	fn := a.reconnectFn
+	fallbackFn := a.fallbackFn
+	oldPoller := a.poller
 	oldCancel := a.cancel
 	oldDone := a.pollerDone
 	return func() tea.Msg {
@@ -284,10 +337,49 @@ func (a *App) doReconnect(preset ConnectionPreset) tea.Cmd {
 		ctx := context.Background()
 		p, err := fn(ctx, preset.DSN)
 		if err != nil {
-			return reconnectErrMsg{err: err}
+			// Build a fallback poller for the still-alive old connection so
+			// the UI stays usable even after a failed switch.
+			var fallback *core.Poller
+			if fallbackFn != nil {
+				fallback = fallbackFn(
+					oldPoller.Interval(),
+					oldPoller.LongRunningThreshold,
+					oldPoller.IdleInTxThreshold,
+				)
+			}
+			return reconnectErrMsg{err: err, fallback: fallback}
 		}
 		return connectionSwitchedMsg{poller: p, name: preset.Name}
 	}
+}
+
+// startPollerWith spins up a new goroutine for p and updates all poller-tracking fields.
+// Returns a waitForSnapshot cmd on the new channel.
+func (a *App) startPollerWith(p *core.Poller) tea.Cmd {
+	ctx, cancel := context.WithCancel(context.Background())
+	ch := make(chan core.PollResult, 1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		p.Run(ctx, ch)
+		close(ch)
+	}()
+	a.gen++
+	a.poller = p
+	a.pollCh = ch
+	a.cancel = cancel
+	a.pollerDone = done
+	return waitForSnapshot(a.pollCh, a.gen)
+}
+
+// dsnForCurrentConn returns the DSN for the active connection, or "" if not found.
+func (a *App) dsnForCurrentConn() string {
+	for _, p := range a.connList {
+		if p.Name == a.currentConn {
+			return p.DSN
+		}
+	}
+	return ""
 }
 
 func (a *App) selectedActivity() *core.Activity {
@@ -508,4 +600,44 @@ func (a *App) renderConnSelector() string {
 	content := strings.Join(lines, "\n")
 	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
 		modalStyle.Render(content))
+}
+
+// sanitizeErr replaces pgx-internal error messages with user-friendly text.
+func sanitizeErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "conn closed") ||
+		strings.Contains(msg, "failed to deallocate") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "EOF") {
+		return errors.New("connection lost")
+	}
+	return err
+}
+
+// isConnError reports whether err looks like a lost or refused connection.
+func isConnError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "conn closed") ||
+		strings.Contains(msg, "failed to deallocate") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "EOF") ||
+		strings.Contains(msg, "connection refused")
+}
+
+// reconnectBackoff returns the wait duration before reconnect attempt n (1-based).
+// Doubles each attempt, capped at 30 s.
+func reconnectBackoff(attempt int) time.Duration {
+	d := time.Duration(1<<uint(attempt-1)) * time.Second
+	if d > 30*time.Second {
+		d = 30 * time.Second
+	}
+	return d
 }

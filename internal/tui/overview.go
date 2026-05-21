@@ -22,8 +22,11 @@ func (a *App) renderOverview() string {
 		renderOverviewMetrics(a.snapshot.DBStats),
 		"",
 		div,
-		renderOverviewFooter(len(a.connList) > 1),
 	}
+	if s := renderStatus(a.lastErr, a.statusMsg); s != "" {
+		parts = append(parts, s)
+	}
+	parts = append(parts, renderOverviewFooter(len(a.connList) > 1))
 	return strings.Join(parts, "\n")
 }
 

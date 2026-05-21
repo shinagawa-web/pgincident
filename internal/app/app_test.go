@@ -474,3 +474,23 @@ func TestBuildReconnectConnectError(t *testing.T) {
 		t.Error("old client must not be closed when connect fails")
 	}
 }
+
+func TestBuildFallback(t *testing.T) {
+	mc := &mockClient{}
+	var client dbClient = mc
+	fallback := buildFallback(&client)
+
+	p := fallback(3*time.Second, 10*time.Second, 2*time.Minute)
+	if p == nil {
+		t.Fatal("expected non-nil poller from fallback")
+	}
+	if p.Interval() != 3*time.Second {
+		t.Errorf("Interval = %v, want 3s", p.Interval())
+	}
+	if p.LongRunningThreshold != 10*time.Second {
+		t.Errorf("LongRunningThreshold = %v, want 10s", p.LongRunningThreshold)
+	}
+	if p.IdleInTxThreshold != 2*time.Minute {
+		t.Errorf("IdleInTxThreshold = %v, want 2m", p.IdleInTxThreshold)
+	}
+}

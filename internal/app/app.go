@@ -135,7 +135,7 @@ func Run(cfgPath string) error {
 
 	defer func() { client.Close(ctx) }()
 
-	return runFn(tui.New(poller, cfg.ConnectionOrder[0], presets, buildReconnect(&client, poller)))
+	return runFn(tui.New(poller, cfg.ConnectionOrder[0], presets, buildReconnect(&client, poller), buildFallback(&client)))
 }
 
 func buildReconnect(clientPtr *dbClient, pol *core.Poller) tui.ReconnectFn {
@@ -150,5 +150,17 @@ func buildReconnect(clientPtr *dbClient, pol *core.Poller) tui.ReconnectFn {
 		p.LongRunningThreshold = pol.LongRunningThreshold
 		p.IdleInTxThreshold = pol.IdleInTxThreshold
 		return p, nil
+	}
+}
+
+// buildFallback returns a FallbackFn that creates a new Poller for the current
+// DB client without reconnecting. Called when a connection switch fails and we
+// need to resume polling the still-alive original connection.
+func buildFallback(clientPtr *dbClient) tui.FallbackFn {
+	return func(interval time.Duration, lr, idle time.Duration) *core.Poller {
+		p := newPollerFn(*clientPtr, interval)
+		p.LongRunningThreshold = lr
+		p.IdleInTxThreshold = idle
+		return p
 	}
 }

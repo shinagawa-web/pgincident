@@ -680,7 +680,7 @@ func TestViewOverviewStatusBadges(t *testing.T) {
 
 func TestNewDefaultsToOverview(t *testing.T) {
 	poller := core.NewPoller(&mockQuerier{}, time.Second)
-	app := New(poller, "default", []ConnectionPreset{{Name: "default", DSN: "postgres://x"}}, nil)
+	app := New(poller, "default", []ConnectionPreset{{Name: "default", DSN: "postgres://x"}}, nil, nil)
 	if app.screen != ScreenOverview {
 		t.Errorf("New() screen = %v, want ScreenOverview", app.screen)
 	}
@@ -837,7 +837,7 @@ func (m *mockQuerier) Stats(_ context.Context) (core.DBStats, error) {
 func TestNew(t *testing.T) {
 	poller := core.NewPoller(&mockQuerier{}, time.Second)
 	presets := []ConnectionPreset{{Name: "primary", DSN: "postgres://x"}}
-	app := New(poller, "primary", presets, nil)
+	app := New(poller, "primary", presets, nil, nil)
 	if app.poller == nil {
 		t.Error("expected poller to be set")
 	}
@@ -1268,5 +1268,190 @@ func TestInit(t *testing.T) {
 	msg := cmd()
 	if _, ok := msg.(snapshotMsg); !ok {
 		t.Errorf("expected snapshotMsg from Init cmd, got %T", msg)
+	}
+}
+
+// --- connection resilience (issue #51) ---
+
+func TestSanitizeErr(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"conn closed", "connection lost"},
+		{"failed to deallocate cached statement(s): conn closed", "connection lost"},
+		{"broken pipe", "connection lost"},
+		{"connection reset by peer", "connection lost"},
+		{"EOF", "connection lost"},
+		{"timeout", "timeout"},             // non-connection error is unchanged
+		{"connection refused", "connection refused"}, // refused not sanitized (shown as-is)
+	}
+	for _, tc := range cases {
+		got := sanitizeErr(fmt.Errorf("%s", tc.input))
+		if got == nil || got.Error() != tc.want {
+			t.Errorf("sanitizeErr(%q) = %v, want %q", tc.input, got, tc.want)
+		}
+	}
+	if sanitizeErr(nil) != nil {
+		t.Error("sanitizeErr(nil) should return nil")
+	}
+}
+
+func TestIsConnError(t *testing.T) {
+	for _, msg := range []string{
+		"conn closed", "failed to deallocate cached statement(s): conn closed",
+		"broken pipe", "connection reset by peer", "EOF", "connection refused",
+	} {
+		if !isConnError(fmt.Errorf("%s", msg)) {
+			t.Errorf("isConnError(%q) = false, want true", msg)
+		}
+	}
+	for _, msg := range []string{"syntax error", "permission denied", "timeout"} {
+		if isConnError(fmt.Errorf("%s", msg)) {
+			t.Errorf("isConnError(%q) = true, want false", msg)
+		}
+	}
+	if isConnError(nil) {
+		t.Error("isConnError(nil) should return false")
+	}
+}
+
+func TestReconnectBackoff(t *testing.T) {
+	cases := [][2]int{{1, 1}, {2, 2}, {3, 4}, {4, 8}, {5, 16}, {6, 30}, {10, 30}}
+	for _, tc := range cases {
+		got := reconnectBackoff(tc[0])
+		want := time.Duration(tc[1]) * time.Second
+		if got != want {
+			t.Errorf("reconnectBackoff(%d) = %v, want %v", tc[0], got, want)
+		}
+	}
+}
+
+func TestReconnectErrWithFallback(t *testing.T) {
+	app := newTestApp()
+	fallback := core.NewPoller(&mockQuerier{}, 2*time.Second)
+	model, cmd := app.Update(reconnectErrMsg{err: fmt.Errorf("connection refused"), fallback: fallback})
+	a := model.(*App)
+	t.Cleanup(func() {
+		a.cancel()
+		<-a.pollerDone
+	})
+	if a.lastErr == nil || a.lastErr.Error() != "connection refused" {
+		t.Errorf("lastErr = %v, want 'connection refused'", a.lastErr)
+	}
+	if a.showConnSelector {
+		t.Error("expected showConnSelector=false")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil cmd (waitForSnapshot) when fallback provided")
+	}
+	if a.poller != fallback {
+		t.Error("expected app.poller to be the fallback poller")
+	}
+}
+
+func TestAutoReconnectStartsOnConnError(t *testing.T) {
+	app := newMultiConnApp()
+	reconnected := false
+	app.reconnectFn = func(_ context.Context, _ string) (*core.Poller, error) {
+		reconnected = true
+		return core.NewPoller(&mockQuerier{}, time.Second), nil
+	}
+
+	// Send a connection error snapshot.
+	_, cmd := app.Update(snapshotMsg{
+		PollResult: core.PollResult{Err: fmt.Errorf("conn closed")},
+		gen:        app.gen,
+	})
+	if !app.autoReconnecting {
+		t.Error("expected autoReconnecting=true after conn error")
+	}
+	if app.lastErr != nil {
+		t.Errorf("lastErr should be nil while reconnecting, got %v", app.lastErr)
+	}
+	if app.statusMsg != "reconnecting…" {
+		t.Errorf("statusMsg = %q, want 'reconnecting…'", app.statusMsg)
+	}
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd for auto-reconnect")
+	}
+
+	// Execute the cmd (waits for pollerDone then calls reconnectFn).
+	msg := cmd()
+	if !reconnected {
+		t.Error("expected reconnectFn to be called")
+	}
+	result, ok := msg.(autoReconnectResultMsg)
+	if !ok {
+		t.Fatalf("expected autoReconnectResultMsg, got %T", msg)
+	}
+	if result.err != nil {
+		t.Errorf("expected success, got err %v", result.err)
+	}
+}
+
+func TestAutoReconnectSucceeded(t *testing.T) {
+	app := newMultiConnApp()
+	newPoller := core.NewPoller(&mockQuerier{}, time.Second)
+	seq := app.autoReconnectSeq
+	model, cmd := app.Update(autoReconnectResultMsg{seq: seq, attempt: 1, poller: newPoller})
+	a := model.(*App)
+	t.Cleanup(func() {
+		a.cancel()
+		<-a.pollerDone
+	})
+	if a.autoReconnecting {
+		t.Error("expected autoReconnecting=false after success")
+	}
+	if a.poller != newPoller {
+		t.Error("expected poller to be updated")
+	}
+	if cmd == nil {
+		t.Error("expected waitForSnapshot cmd after reconnect")
+	}
+	if !strings.Contains(a.statusMsg, "reconnected") {
+		t.Errorf("statusMsg = %q, want 'reconnected: ...'", a.statusMsg)
+	}
+}
+
+func TestAutoReconnectRetryOnFailure(t *testing.T) {
+	app := newMultiConnApp()
+	app.reconnectFn = func(_ context.Context, _ string) (*core.Poller, error) {
+		return nil, fmt.Errorf("connection refused")
+	}
+	seq := app.autoReconnectSeq
+	model, cmd := app.Update(autoReconnectResultMsg{seq: seq, attempt: 1, err: fmt.Errorf("connection refused")})
+	a := model.(*App)
+	if cmd == nil {
+		t.Fatal("expected retry cmd after reconnect failure")
+	}
+	if !strings.Contains(a.statusMsg, "attempt 2") {
+		t.Errorf("statusMsg = %q, want 'reconnecting… (attempt 2)'", a.statusMsg)
+	}
+	// Stale seq should be ignored.
+	model2, cmd2 := app.Update(autoReconnectResultMsg{seq: seq - 1, attempt: 1, err: fmt.Errorf("old")})
+	_ = model2
+	if cmd2 != nil {
+		t.Error("expected stale autoReconnectResultMsg to be ignored (nil cmd)")
+	}
+}
+
+func TestAutoReconnectCancelledByManualSwitch(t *testing.T) {
+	app := newMultiConnApp()
+	app.autoReconnecting = true
+	app.autoReconnectSeq = 5
+	app.reconnectFn = func(_ context.Context, dsn string) (*core.Poller, error) {
+		return core.NewPoller(&mockQuerier{}, time.Second), nil
+	}
+	app.showConnSelector = true
+	app.connCursor = 1 // replica
+
+	_, _ = app.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if app.autoReconnecting {
+		t.Error("expected autoReconnecting=false after manual switch")
+	}
+	if app.autoReconnectSeq != 6 {
+		t.Errorf("autoReconnectSeq = %d, want 6", app.autoReconnectSeq)
 	}
 }
