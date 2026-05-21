@@ -1428,11 +1428,67 @@ func TestAutoReconnectRetryOnFailure(t *testing.T) {
 	if !strings.Contains(a.statusMsg, "attempt 2") {
 		t.Errorf("statusMsg = %q, want 'reconnecting… (attempt 2)'", a.statusMsg)
 	}
+	// Execute the retry cmd to cover the closure body (sleeps 1s per backoff).
+	result := cmd()
+	retryMsg, ok := result.(autoReconnectResultMsg)
+	if !ok {
+		t.Fatalf("expected autoReconnectResultMsg from retry cmd, got %T", result)
+	}
+	if retryMsg.attempt != 2 {
+		t.Errorf("retry attempt = %d, want 2", retryMsg.attempt)
+	}
+
 	// Stale seq should be ignored.
 	model2, cmd2 := app.Update(autoReconnectResultMsg{seq: seq - 1, attempt: 1, err: fmt.Errorf("old")})
 	_ = model2
 	if cmd2 != nil {
 		t.Error("expected stale autoReconnectResultMsg to be ignored (nil cmd)")
+	}
+}
+
+func TestDoReconnectFallbackOnError(t *testing.T) {
+	app := newMultiConnApp()
+	fallbackPoller := core.NewPoller(&mockQuerier{}, 2*time.Second)
+	app.reconnectFn = func(_ context.Context, _ string) (*core.Poller, error) {
+		return nil, fmt.Errorf("connection refused")
+	}
+	app.fallbackFn = func(_ time.Duration, _, _ time.Duration) *core.Poller {
+		return fallbackPoller
+	}
+	preset := ConnectionPreset{Name: "replica", DSN: "postgres://r@localhost/db"}
+	cmd := app.doReconnect(preset)
+	msg := cmd()
+	errMsg, ok := msg.(reconnectErrMsg)
+	if !ok {
+		t.Fatalf("expected reconnectErrMsg, got %T", msg)
+	}
+	if errMsg.fallback != fallbackPoller {
+		t.Error("expected fallback poller in reconnectErrMsg")
+	}
+}
+
+func TestDsnForCurrentConnMissing(t *testing.T) {
+	app := newTestApp()
+	app.currentConn = "ghost"
+	app.connList = []ConnectionPreset{{Name: "primary", DSN: "postgres://p@localhost/db"}}
+	if dsn := app.dsnForCurrentConn(); dsn != "" {
+		t.Errorf("expected empty DSN for unknown conn, got %q", dsn)
+	}
+}
+
+func TestOverviewShowsErrorStatus(t *testing.T) {
+	app := &App{
+		pollCh:  make(chan core.PollResult),
+		cancel:  func() {},
+		poller:  core.NewPoller(nil, time.Second),
+		width:   120,
+		height:  40,
+		screen:  ScreenOverview,
+		lastErr: errors.New("connection lost"),
+	}
+	out := app.renderOverview()
+	if !strings.Contains(out, "connection lost") {
+		t.Errorf("overview should display lastErr, got:\n%s", out)
 	}
 }
 
