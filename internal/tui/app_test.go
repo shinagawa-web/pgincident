@@ -1336,3 +1336,61 @@ func TestBackoffNextCap(t *testing.T) {
 		t.Errorf("backoffNext(20s) = %v, want 30s", got)
 	}
 }
+
+func TestSnapshotSuccessWhileReconnecting(t *testing.T) {
+	app := newTestApp()
+	app.currentConn = "primary"
+	app.autoReconnecting = true
+	app.autoReconnectGen = 1
+	snap := core.Snapshot{PGVersion: "16.1"}
+	model, _ := app.Update(snapshotMsg{PollResult: core.PollResult{Snapshot: snap}})
+	a := model.(*App)
+	if a.autoReconnecting {
+		t.Error("expected autoReconnecting=false after successful snapshot")
+	}
+	if a.statusMsg != "connected: primary" {
+		t.Errorf("statusMsg = %q, want connected: primary", a.statusMsg)
+	}
+	if a.autoReconnectGen != 2 {
+		t.Errorf("autoReconnectGen = %d, want 2 after natural recovery", a.autoReconnectGen)
+	}
+}
+
+func TestSnapshotConnLostNoPreset(t *testing.T) {
+	app := newTestApp()
+	app.currentConn = "nonexistent"
+	app.connList = []ConnectionPreset{{Name: "primary", DSN: "postgres://p"}}
+	app.reconnectFn = func(_ context.Context, _ string) (*core.Poller, error) {
+		return nil, nil
+	}
+	model, _ := app.Update(snapshotMsg{PollResult: core.PollResult{Err: errors.New("conn closed")}})
+	a := model.(*App)
+	if a.lastErr == nil || a.lastErr.Error() != "connection lost" {
+		t.Errorf("lastErr = %v, want connection lost", a.lastErr)
+	}
+}
+
+func TestConnectionSwitchedAfterGiveUp(t *testing.T) {
+	app := newTestApp()
+	app.autoReconnectGen = 1
+	// Give-up: deadline is in the past
+	model, _ := app.Update(autoReconnectFailedMsg{
+		gen:      1,
+		delay:    time.Second,
+		deadline: time.Now().Add(-time.Second),
+	})
+	a := model.(*App)
+	if a.autoReconnectGen != 2 {
+		t.Errorf("autoReconnectGen = %d, want 2 after give-up", a.autoReconnectGen)
+	}
+	// Stale connectionSwitchedMsg with the old gen should be dropped
+	newPoller := core.NewPoller(&mockQuerier{}, time.Second)
+	model2, cmd := a.Update(connectionSwitchedMsg{poller: newPoller, name: "primary", autoGen: 1})
+	a2 := model2.(*App)
+	if a2.currentConn == "primary" {
+		t.Error("stale connectionSwitchedMsg should be ignored after give-up")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd for stale connectionSwitchedMsg after give-up")
+	}
+}
