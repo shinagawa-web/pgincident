@@ -1270,3 +1270,69 @@ func TestInit(t *testing.T) {
 		t.Errorf("expected snapshotMsg from Init cmd, got %T", msg)
 	}
 }
+
+// --- auto-reconnect unit tests ---
+
+func TestUpdateConnectionSwitchedStale(t *testing.T) {
+	app := newTestApp()
+	app.autoReconnectGen = 2
+	newPoller := core.NewPoller(&mockQuerier{}, time.Second)
+	model, cmd := app.Update(connectionSwitchedMsg{poller: newPoller, name: "replica", autoGen: 1})
+	a := model.(*App)
+	if a.currentConn == "replica" {
+		t.Error("stale connectionSwitchedMsg should be ignored")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd for stale connectionSwitchedMsg")
+	}
+}
+
+func TestUpdateAutoReconnectFailedStale(t *testing.T) {
+	app := newTestApp()
+	app.autoReconnectGen = 2
+	_, cmd := app.Update(autoReconnectFailedMsg{gen: 1, delay: time.Second, deadline: time.Now().Add(time.Minute)})
+	if cmd != nil {
+		t.Error("expected nil cmd for stale autoReconnectFailedMsg")
+	}
+}
+
+func TestAutoReconnectFailedRetrySucceeds(t *testing.T) {
+	app := newTestApp()
+	app.reconnectFn = func(_ context.Context, _ string) (*core.Poller, error) {
+		return core.NewPoller(&mockQuerier{}, time.Second), nil
+	}
+	app.autoReconnectGen = 1
+	_, cmd := app.Update(autoReconnectFailedMsg{
+		gen:      1,
+		delay:    time.Millisecond,
+		deadline: time.Now().Add(10 * time.Minute),
+		dsn:      "postgres://p",
+		name:     "primary",
+	})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	switched, ok := msg.(connectionSwitchedMsg)
+	if !ok {
+		t.Fatalf("expected connectionSwitchedMsg, got %T", msg)
+	}
+	if switched.name != "primary" || switched.autoGen != 1 {
+		t.Errorf("switched = {name:%q autoGen:%d}, want {primary 1}", switched.name, switched.autoGen)
+	}
+}
+
+func TestCurrentPresetNil(t *testing.T) {
+	app := newTestApp()
+	app.connList = []ConnectionPreset{{Name: "primary", DSN: "postgres://p"}}
+	app.currentConn = "nonexistent"
+	if app.currentPreset() != nil {
+		t.Error("expected nil for unknown currentConn")
+	}
+}
+
+func TestBackoffNextCap(t *testing.T) {
+	if got := backoffNext(20 * time.Second); got != 30*time.Second {
+		t.Errorf("backoffNext(20s) = %v, want 30s", got)
+	}
+}
