@@ -90,6 +90,9 @@ func (p *Poller) Run(ctx context.Context, out chan<- PollResult) {
 }
 
 func (p *Poller) capture(ctx context.Context) (Snapshot, error) {
+	if p.client == nil {
+		return Snapshot{}, nil
+	}
 	now := time.Now()
 
 	if p.pgVersion == "" {

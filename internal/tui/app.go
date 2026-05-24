@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -32,12 +33,23 @@ type snapshotMsg struct {
 }
 
 type connectionSwitchedMsg struct {
-	poller *core.Poller
-	name   string
+	poller  *core.Poller
+	name    string
+	autoGen int
 }
 
 type reconnectErrMsg struct {
-	err error
+	err  error
+	name string
+	dsn  string
+}
+
+type autoReconnectFailedMsg struct {
+	gen      int
+	delay    time.Duration
+	deadline time.Time
+	dsn      string
+	name     string
 }
 
 // Screen identifies which top-level screen is active.
@@ -76,8 +88,11 @@ type App struct {
 	reconnectFn      ReconnectFn
 	showConnSelector bool
 	connCursor       int
-	gen              int
-	pollerDone       <-chan struct{} // closed when the current poller goroutine exits
+	gen                  int
+	pollerDone           <-chan struct{} // closed when the current poller goroutine exits
+	reconnectMaxDuration time.Duration  // max wall-clock time to retry before giving up
+	autoReconnecting     bool
+	autoReconnectGen     int
 }
 
 func New(poller *core.Poller, currentConn string, connList []ConnectionPreset, reconnectFn ReconnectFn) *App {
@@ -90,13 +105,15 @@ func New(poller *core.Poller, currentConn string, connList []ConnectionPreset, r
 		close(ch)
 	}()
 	return &App{
-		poller:      poller,
-		pollCh:      ch,
-		cancel:      cancel,
-		currentConn: currentConn,
-		connList:    connList,
-		reconnectFn: reconnectFn,
-		pollerDone:  done,
+		poller:               poller,
+		pollCh:               ch,
+		cancel:               cancel,
+		currentConn:          currentConn,
+		connList:             connList,
+		reconnectFn:          reconnectFn,
+		pollerDone:           done,
+		screen:               ScreenOverview,
+		reconnectMaxDuration: 10 * time.Minute,
 	}
 }
 
@@ -126,14 +143,32 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		if msg.Err != nil {
-			a.lastErr = msg.Err
+			if sanitizeConnError(msg.Err.Error()) == "connection lost" && !a.autoReconnecting && a.reconnectFn != nil {
+				preset := a.currentPreset()
+				if preset != nil {
+					a.autoReconnecting = true
+					a.statusMsg = "reconnecting…"
+					a.lastErr = nil
+					return a, tea.Batch(
+						waitForSnapshot(a.pollCh, a.gen),
+						a.beginAutoReconnect(preset.DSN, preset.Name),
+					)
+				}
+			} else if sanitizeConnError(msg.Err.Error()) != "connection lost" {
+				a.lastErr = msg.Err
+			}
 		} else {
 			a.snapshot = msg.Snapshot
 			a.lastErr = nil
+			a.autoReconnecting = false
 		}
 		return a, waitForSnapshot(a.pollCh, a.gen)
 	case connectionSwitchedMsg:
-		a.cancel() // idempotent: doReconnect already called this, safe to repeat
+		if msg.autoGen != 0 && msg.autoGen != a.autoReconnectGen {
+			return a, nil
+		}
+		a.autoReconnectGen++
+		a.cancel()
 		ctx, cancel := context.WithCancel(context.Background())
 		ch := make(chan core.PollResult, 1)
 		done := make(chan struct{})
@@ -149,12 +184,44 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.pollerDone = done
 		a.currentConn = msg.name
 		a.showConnSelector = false
+		a.autoReconnecting = false
 		a.statusMsg = fmt.Sprintf("connected: %s", msg.name)
 		return a, waitForSnapshot(a.pollCh, a.gen)
 	case reconnectErrMsg:
+		if msg.dsn != "" {
+			a.currentConn = msg.name
+			a.showConnSelector = false
+			a.autoReconnecting = true
+			a.statusMsg = "reconnecting…"
+			a.lastErr = nil
+			return a, a.beginAutoReconnect(msg.dsn, msg.name)
+		}
 		a.lastErr = msg.err
 		a.showConnSelector = false
 		return a, nil
+	case autoReconnectFailedMsg:
+		if msg.gen != a.autoReconnectGen {
+			return a, nil
+		}
+		if time.Now().After(msg.deadline) {
+			a.autoReconnecting = false
+			a.lastErr = errors.New("connection lost")
+			a.statusMsg = ""
+			return a, nil
+		}
+		fn := a.reconnectFn
+		gen := msg.gen
+		deadline := msg.deadline
+		dsn := msg.dsn
+		name := msg.name
+		nextDelay := backoffNext(msg.delay)
+		return a, tea.Tick(msg.delay, func(_ time.Time) tea.Msg {
+			p, err := fn(context.Background(), dsn)
+			if err != nil {
+				return autoReconnectFailedMsg{gen: gen, delay: nextDelay, deadline: deadline, dsn: dsn, name: name}
+			}
+			return connectionSwitchedMsg{poller: p, name: name, autoGen: gen}
+		})
 	case tea.KeyMsg:
 		return a.handleKey(msg)
 	}
@@ -284,10 +351,41 @@ func (a *App) doReconnect(preset ConnectionPreset) tea.Cmd {
 		ctx := context.Background()
 		p, err := fn(ctx, preset.DSN)
 		if err != nil {
-			return reconnectErrMsg{err: err}
+			return reconnectErrMsg{err: err, name: preset.Name, dsn: preset.DSN}
 		}
 		return connectionSwitchedMsg{poller: p, name: preset.Name}
 	}
+}
+
+func (a *App) currentPreset() *ConnectionPreset {
+	for i := range a.connList {
+		if a.connList[i].Name == a.currentConn {
+			return &a.connList[i]
+		}
+	}
+	return nil
+}
+
+func (a *App) beginAutoReconnect(dsn, name string) tea.Cmd {
+	a.autoReconnectGen++
+	gen := a.autoReconnectGen
+	deadline := time.Now().Add(a.reconnectMaxDuration)
+	fn := a.reconnectFn
+	return func() tea.Msg {
+		p, err := fn(context.Background(), dsn)
+		if err != nil {
+			return autoReconnectFailedMsg{gen: gen, delay: time.Second, deadline: deadline, dsn: dsn, name: name}
+		}
+		return connectionSwitchedMsg{poller: p, name: name, autoGen: gen}
+	}
+}
+
+func backoffNext(d time.Duration) time.Duration {
+	next := d * 2
+	if next > 30*time.Second {
+		return 30 * time.Second
+	}
+	return next
 }
 
 func (a *App) selectedActivity() *core.Activity {
