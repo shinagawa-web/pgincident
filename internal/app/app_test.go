@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/shinagawa-web/pgincident/internal/core"
 )
 
@@ -138,6 +140,77 @@ func TestRunConnectError(t *testing.T) {
 	err := Run(f)
 	if err == nil || !strings.Contains(err.Error(), "connect failed") {
 		t.Errorf("err = %v, want connect error", err)
+	}
+	if !strings.Contains(err.Error(), "default") {
+		t.Errorf("err = %v, want connection name \"default\" in error", err)
+	}
+}
+
+func TestFriendlyConnectErrNonPgconn(t *testing.T) {
+	plain := fmt.Errorf("some other error")
+	if got := friendlyConnectErr(plain); got != plain {
+		t.Errorf("expected passthrough for non-pgconn error, got %v", got)
+	}
+}
+
+func TestFriendlyConnectErrPgconn(t *testing.T) {
+	cfg := &pgconn.Config{Host: "db.example.com", Port: 5432}
+	inner := fmt.Errorf("connection refused")
+	wrapped := errors.Join(inner)
+	ce := &pgconn.ConnectError{Config: cfg}
+	// Trigger friendlyConnectErr via a real pgconn.ConnectError by trying
+	// an actual connection to a port that will be refused.
+	_, err := pgconn.Connect(context.Background(), "host=127.0.0.1 port=19999 user=x dbname=x connect_timeout=1")
+	if err == nil {
+		t.Skip("port 19999 unexpectedly open; skipping")
+	}
+	got := friendlyConnectErr(err)
+	if strings.Contains(got.Error(), "failed to connect to") {
+		t.Errorf("expected pgx internals stripped, got: %v", got)
+	}
+	if !strings.Contains(got.Error(), "127.0.0.1:19999") {
+		t.Errorf("expected host:port in error, got: %v", got)
+	}
+	_ = cfg
+	_ = ce
+	_ = wrapped
+}
+
+func TestRootCauseSingleError(t *testing.T) {
+	leaf := fmt.Errorf("leaf")
+	if got := rootCause(leaf); got != leaf {
+		t.Errorf("rootCause of unwrappable error = %v, want %v", got, leaf)
+	}
+}
+
+func TestRootCauseWrapped(t *testing.T) {
+	leaf := fmt.Errorf("leaf")
+	wrapped := fmt.Errorf("outer: %w", leaf)
+	if got := rootCause(wrapped); got != leaf {
+		t.Errorf("rootCause = %v, want %v", got, leaf)
+	}
+}
+
+func TestRootCauseJoined(t *testing.T) {
+	leaf := fmt.Errorf("leaf")
+	joined := errors.Join(leaf, fmt.Errorf("other"))
+	if got := rootCause(joined); got != leaf {
+		t.Errorf("rootCause of joined = %v, want %v", got, leaf)
+	}
+}
+
+func TestRunConnectErrorIncludesConnName(t *testing.T) {
+	withMockConnect(t, func(_ context.Context, _ string) (dbClient, error) {
+		return nil, fmt.Errorf("dial failed")
+	})
+	f := writeTOML(t, "[connections.primary]\ndsn = \"postgres://u:p@localhost/db\"")
+	err := Run(f)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	want := `connect "primary": dial failed`
+	if err.Error() != want {
+		t.Errorf("err = %q, want %q", err.Error(), want)
 	}
 }
 
