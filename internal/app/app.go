@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/shinagawa-web/pgincident/internal/cli"
 	"github.com/shinagawa-web/pgincident/internal/config"
 	"github.com/shinagawa-web/pgincident/internal/core"
@@ -120,7 +121,7 @@ func Run(cfgPath string) error {
 
 	client, err := connectFn(ctx, firstConn.DSN)
 	if err != nil {
-		return err
+		return fmt.Errorf("connect %q: %w", cfg.ConnectionOrder[0], friendlyConnectErr(err))
 	}
 
 	poller := newPollerFn(client, 5*time.Second)
@@ -136,6 +137,36 @@ func Run(cfgPath string) error {
 	defer func() { client.Close(ctx) }()
 
 	return runFn(tui.New(poller, cfg.ConnectionOrder[0], presets, buildReconnect(&client, poller)))
+}
+
+// friendlyConnectErr distills a pgconn.ConnectError down to "host:port: reason",
+// stripping the verbose per-address dial log that pgx emits internally.
+func friendlyConnectErr(err error) error {
+	var ce *pgconn.ConnectError
+	if !errors.As(err, &ce) {
+		return err
+	}
+	addr := fmt.Sprintf("%s:%d", ce.Config.Host, ce.Config.Port)
+	return fmt.Errorf("%s: %w", addr, rootCause(ce.Unwrap()))
+}
+
+// rootCause drills down through errors.Join wrappers and single-error wrappers
+// to return the deepest non-nil error.
+func rootCause(err error) error {
+	for {
+		if u, ok := err.(interface{ Unwrap() []error }); ok {
+			if errs := u.Unwrap(); len(errs) > 0 {
+				err = errs[0]
+				continue
+			}
+			return err
+		}
+		next := errors.Unwrap(err)
+		if next == nil {
+			return err
+		}
+		err = next
+	}
 }
 
 func buildReconnect(clientPtr *dbClient, pol *core.Poller) tui.ReconnectFn {
