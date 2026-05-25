@@ -154,26 +154,20 @@ func TestFriendlyConnectErrNonPgconn(t *testing.T) {
 }
 
 func TestFriendlyConnectErrPgconn(t *testing.T) {
-	cfg := &pgconn.Config{Host: "db.example.com", Port: 5432}
-	inner := fmt.Errorf("connection refused")
-	wrapped := errors.Join(inner)
-	ce := &pgconn.ConnectError{Config: cfg}
-	// Trigger friendlyConnectErr via a real pgconn.ConnectError by trying
-	// an actual connection to a port that will be refused.
 	_, err := pgconn.Connect(context.Background(), "host=127.0.0.1 port=19999 user=x dbname=x connect_timeout=1")
 	if err == nil {
 		t.Skip("port 19999 unexpectedly open; skipping")
 	}
-	got := friendlyConnectErr(err)
-	if strings.Contains(got.Error(), "failed to connect to") {
-		t.Errorf("expected pgx internals stripped, got: %v", got)
+	got := friendlyConnectErr(err).Error()
+	if strings.Contains(got, "failed to connect to") {
+		t.Errorf("pgx internals must be stripped, got: %v", got)
 	}
-	if !strings.Contains(got.Error(), "127.0.0.1:19999") {
+	if !strings.Contains(got, "127.0.0.1:19999") {
 		t.Errorf("expected host:port in error, got: %v", got)
 	}
-	_ = cfg
-	_ = ce
-	_ = wrapped
+	if !strings.Contains(got, "connection refused") {
+		t.Errorf("expected reason in error, got: %v", got)
+	}
 }
 
 func TestRootCauseSingleError(t *testing.T) {
