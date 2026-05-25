@@ -199,6 +199,26 @@ func TestRootCauseJoined(t *testing.T) {
 	}
 }
 
+func TestRootCauseEmptyJoin(t *testing.T) {
+	// errors.Join(nil...) returns nil, so construct a custom type that
+	// implements Unwrap() []error and returns an empty slice.
+	type emptyJoin struct{}
+	_ = emptyJoin{}
+
+	// Use a wrapper that satisfies the multi-unwrap interface with empty slice.
+	joined := &multiErr{}
+	got := rootCause(joined)
+	if got != joined {
+		t.Errorf("rootCause of empty-join = %v, want passthrough %v", got, joined)
+	}
+}
+
+// multiErr satisfies interface{ Unwrap() []error } with an empty slice.
+type multiErr struct{}
+
+func (e *multiErr) Error() string        { return "multi" }
+func (e *multiErr) Unwrap() []error      { return nil }
+
 func TestRunConnectErrorIncludesConnName(t *testing.T) {
 	withMockConnect(t, func(_ context.Context, _ string) (dbClient, error) {
 		return nil, fmt.Errorf("dial failed")
