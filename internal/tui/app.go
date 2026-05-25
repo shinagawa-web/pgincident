@@ -50,6 +50,7 @@ type autoReconnectFailedMsg struct {
 	deadline time.Time
 	dsn      string
 	name     string
+	attempt  int
 }
 
 // Screen identifies which top-level screen is active.
@@ -147,7 +148,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				preset := a.currentPreset()
 				if preset != nil {
 					a.autoReconnecting = true
-					a.statusMsg = "reconnecting…"
+					a.snapshot = core.Snapshot{}
+					a.statusMsg = fmt.Sprintf("reconnecting to %s — connection lost", preset.Name)
 					a.lastErr = nil
 					return a, tea.Batch(
 						waitForSnapshot(a.pollCh, a.gen),
@@ -198,7 +200,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.currentConn = msg.name
 			a.showConnSelector = false
 			a.autoReconnecting = true
-			a.statusMsg = "reconnecting…"
+			a.snapshot = core.Snapshot{}
+			a.statusMsg = fmt.Sprintf("reconnecting to %s — connection lost", msg.name)
 			a.lastErr = nil
 			return a, a.beginAutoReconnect(msg.dsn, msg.name)
 		}
@@ -216,11 +219,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.autoReconnectGen++
 			return a, nil
 		}
+		a.statusMsg = fmt.Sprintf("reconnecting to %s — attempt %d, retrying in %s", msg.name, msg.attempt, msg.delay.Round(time.Second))
 		fn := a.reconnectFn
 		gen := msg.gen
 		deadline := msg.deadline
 		dsn := msg.dsn
 		name := msg.name
+		nextAttempt := msg.attempt + 1
 		nextDelay := backoffNext(msg.delay)
 		oldCancel := a.cancel
 		oldDone := a.pollerDone
@@ -229,7 +234,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			<-oldDone
 			p, err := fn(context.Background(), dsn)
 			if err != nil {
-				return autoReconnectFailedMsg{gen: gen, delay: nextDelay, deadline: deadline, dsn: dsn, name: name}
+				return autoReconnectFailedMsg{gen: gen, delay: nextDelay, deadline: deadline, dsn: dsn, name: name, attempt: nextAttempt}
 			}
 			return connectionSwitchedMsg{poller: p, name: name, autoGen: gen}
 		})
@@ -389,7 +394,7 @@ func (a *App) beginAutoReconnect(dsn, name string) tea.Cmd {
 		<-oldDone
 		p, err := fn(context.Background(), dsn)
 		if err != nil {
-			return autoReconnectFailedMsg{gen: gen, delay: time.Second, deadline: deadline, dsn: dsn, name: name}
+			return autoReconnectFailedMsg{gen: gen, delay: time.Second, deadline: deadline, dsn: dsn, name: name, attempt: 1}
 		}
 		return connectionSwitchedMsg{poller: p, name: name, autoGen: gen}
 	}

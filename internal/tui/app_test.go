@@ -1370,6 +1370,40 @@ func TestSnapshotConnLostNoPreset(t *testing.T) {
 	}
 }
 
+func TestSnapshotClearedOnConnLost(t *testing.T) {
+	app := newTestApp()
+	app.connList = []ConnectionPreset{{Name: "primary", DSN: "postgres://p"}}
+	app.currentConn = "primary"
+	app.reconnectFn = func(_ context.Context, _ string) (*core.Poller, error) {
+		return nil, errors.New("connection refused")
+	}
+	app.snapshot = core.Snapshot{PGVersion: "16.1", Activities: []core.Activity{{PID: 1}}}
+
+	model, _ := app.Update(snapshotMsg{PollResult: core.PollResult{Err: errors.New("conn closed")}})
+	a := model.(*App)
+
+	if a.snapshot.PGVersion != "" || len(a.snapshot.Activities) != 0 {
+		t.Error("expected snapshot to be cleared when auto-reconnect starts")
+	}
+}
+
+func TestSnapshotClearedOnReconnectErrMsg(t *testing.T) {
+	app := newTestApp()
+	app.connList = []ConnectionPreset{{Name: "primary", DSN: "postgres://p"}}
+	app.currentConn = "primary"
+	app.reconnectFn = func(_ context.Context, _ string) (*core.Poller, error) {
+		return nil, errors.New("connection refused")
+	}
+	app.snapshot = core.Snapshot{PGVersion: "16.1", Activities: []core.Activity{{PID: 1}}}
+
+	model, _ := app.Update(reconnectErrMsg{name: "primary", dsn: "postgres://p"})
+	a := model.(*App)
+
+	if a.snapshot.PGVersion != "" || len(a.snapshot.Activities) != 0 {
+		t.Error("expected snapshot to be cleared when reconnectErrMsg triggers auto-reconnect")
+	}
+}
+
 func TestConnectionSwitchedAfterGiveUp(t *testing.T) {
 	app := newTestApp()
 	app.autoReconnectGen = 1

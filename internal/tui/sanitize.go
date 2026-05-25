@@ -10,6 +10,8 @@ func sanitizeConnError(errStr string) string {
 		"broken pipe",
 		"connection reset by peer",
 		"EOF",
+		"terminating connection",  // SQLSTATE 57P01/57P02: admin or crash shutdown
+		"server closed the connection unexpectedly",
 	}
 	for _, sig := range connSignals {
 		if strings.Contains(errStr, sig) {

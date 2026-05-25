@@ -33,6 +33,20 @@ func TestU6_EOF(t *testing.T) {
 	}
 }
 
+func TestU8_AdminShutdown(t *testing.T) {
+	in := "FATAL: terminating connection due to administrator command (SQLSTATE 57P01)"
+	if got := sanitizeConnError(in); got != "connection lost" {
+		t.Errorf("sanitizeConnError(%q) = %q, want %q", in, got, "connection lost")
+	}
+}
+
+func TestU9_ServerClosedUnexpectedly(t *testing.T) {
+	in := "server closed the connection unexpectedly"
+	if got := sanitizeConnError(in); got != "connection lost" {
+		t.Errorf("sanitizeConnError(%q) = %q, want %q", in, got, "connection lost")
+	}
+}
+
 func TestU7_OtherErrorPassthrough(t *testing.T) {
 	cases := []string{
 		"permission denied for table pg_stat_activity",
