@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,15 +155,26 @@ func TestFriendlyConnectErrNonPgconn(t *testing.T) {
 }
 
 func TestFriendlyConnectErrPgconn(t *testing.T) {
-	_, err := pgconn.Connect(context.Background(), "host=127.0.0.1 port=19999 user=x dbname=x connect_timeout=1")
-	if err == nil {
-		t.Skip("port 19999 unexpectedly open; skipping")
+	dialErr := fmt.Errorf("connection refused")
+	cfg, err := pgconn.ParseConfig("host=db.example.com port=5432 user=x dbname=x")
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
 	}
-	got := friendlyConnectErr(err).Error()
+	cfg.LookupFunc = func(_ context.Context, _ string) ([]string, error) {
+		return []string{"127.0.0.1"}, nil
+	}
+	cfg.DialFunc = func(_ context.Context, _, _ string) (net.Conn, error) {
+		return nil, dialErr
+	}
+	_, connErr := pgconn.ConnectConfig(context.Background(), cfg)
+	if connErr == nil {
+		t.Fatal("expected connection error, got nil")
+	}
+	got := friendlyConnectErr(connErr).Error()
 	if strings.Contains(got, "failed to connect to") {
 		t.Errorf("pgx internals must be stripped, got: %v", got)
 	}
-	if !strings.Contains(got, "127.0.0.1:19999") {
+	if !strings.Contains(got, "db.example.com:5432") {
 		t.Errorf("expected host:port in error, got: %v", got)
 	}
 	if !strings.Contains(got, "connection refused") {
@@ -194,12 +206,6 @@ func TestRootCauseJoined(t *testing.T) {
 }
 
 func TestRootCauseEmptyJoin(t *testing.T) {
-	// errors.Join(nil...) returns nil, so construct a custom type that
-	// implements Unwrap() []error and returns an empty slice.
-	type emptyJoin struct{}
-	_ = emptyJoin{}
-
-	// Use a wrapper that satisfies the multi-unwrap interface with empty slice.
 	joined := &multiErr{}
 	got := rootCause(joined)
 	if got != joined {
