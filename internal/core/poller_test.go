@@ -293,3 +293,14 @@ func TestCaptureStatsError(t *testing.T) {
 		t.Error("expected Stats error")
 	}
 }
+
+func TestCaptureNilClient(t *testing.T) {
+	p := NewPoller(nil, time.Second)
+	snap, err := p.capture(context.Background())
+	if err != nil {
+		t.Errorf("nil client should return empty snapshot without error, got: %v", err)
+	}
+	if snap.PGVersion != "" || snap.ServerAddr != "" {
+		t.Errorf("nil client should return empty Snapshot, got: %+v", snap)
+	}
+}

@@ -1270,3 +1270,161 @@ func TestInit(t *testing.T) {
 		t.Errorf("expected snapshotMsg from Init cmd, got %T", msg)
 	}
 }
+
+// --- auto-reconnect unit tests ---
+
+func TestUpdateConnectionSwitchedStale(t *testing.T) {
+	app := newTestApp()
+	app.autoReconnectGen = 2
+	newPoller := core.NewPoller(&mockQuerier{}, time.Second)
+	model, cmd := app.Update(connectionSwitchedMsg{poller: newPoller, name: "replica", autoGen: 1})
+	a := model.(*App)
+	if a.currentConn == "replica" {
+		t.Error("stale connectionSwitchedMsg should be ignored")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd for stale connectionSwitchedMsg")
+	}
+}
+
+func TestUpdateAutoReconnectFailedStale(t *testing.T) {
+	app := newTestApp()
+	app.autoReconnectGen = 2
+	_, cmd := app.Update(autoReconnectFailedMsg{gen: 1, delay: time.Second, deadline: time.Now().Add(time.Minute)})
+	if cmd != nil {
+		t.Error("expected nil cmd for stale autoReconnectFailedMsg")
+	}
+}
+
+func TestAutoReconnectFailedRetrySucceeds(t *testing.T) {
+	app := newTestApp()
+	app.reconnectFn = func(_ context.Context, _ string) (*core.Poller, error) {
+		return core.NewPoller(&mockQuerier{}, time.Second), nil
+	}
+	app.autoReconnectGen = 1
+	_, cmd := app.Update(autoReconnectFailedMsg{
+		gen:      1,
+		delay:    time.Millisecond,
+		deadline: time.Now().Add(10 * time.Minute),
+		dsn:      "postgres://p",
+		name:     "primary",
+	})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd")
+	}
+	msg := cmd()
+	switched, ok := msg.(connectionSwitchedMsg)
+	if !ok {
+		t.Fatalf("expected connectionSwitchedMsg, got %T", msg)
+	}
+	if switched.name != "primary" || switched.autoGen != 1 {
+		t.Errorf("switched = {name:%q autoGen:%d}, want {primary 1}", switched.name, switched.autoGen)
+	}
+}
+
+func TestCurrentPresetNil(t *testing.T) {
+	app := newTestApp()
+	app.connList = []ConnectionPreset{{Name: "primary", DSN: "postgres://p"}}
+	app.currentConn = "nonexistent"
+	if app.currentPreset() != nil {
+		t.Error("expected nil for unknown currentConn")
+	}
+}
+
+func TestBackoffNextCap(t *testing.T) {
+	if got := backoffNext(20 * time.Second); got != 30*time.Second {
+		t.Errorf("backoffNext(20s) = %v, want 30s", got)
+	}
+}
+
+func TestSnapshotSuccessWhileReconnecting(t *testing.T) {
+	app := newTestApp()
+	app.currentConn = "primary"
+	app.autoReconnecting = true
+	app.autoReconnectGen = 1
+	snap := core.Snapshot{PGVersion: "16.1"}
+	model, _ := app.Update(snapshotMsg{PollResult: core.PollResult{Snapshot: snap}})
+	a := model.(*App)
+	if a.autoReconnecting {
+		t.Error("expected autoReconnecting=false after successful snapshot")
+	}
+	if a.statusMsg != "connected: primary" {
+		t.Errorf("statusMsg = %q, want connected: primary", a.statusMsg)
+	}
+	if a.autoReconnectGen != 2 {
+		t.Errorf("autoReconnectGen = %d, want 2 after natural recovery", a.autoReconnectGen)
+	}
+}
+
+func TestSnapshotConnLostNoPreset(t *testing.T) {
+	app := newTestApp()
+	app.currentConn = "nonexistent"
+	app.connList = []ConnectionPreset{{Name: "primary", DSN: "postgres://p"}}
+	app.reconnectFn = func(_ context.Context, _ string) (*core.Poller, error) {
+		return nil, nil
+	}
+	model, _ := app.Update(snapshotMsg{PollResult: core.PollResult{Err: errors.New("conn closed")}})
+	a := model.(*App)
+	if a.lastErr == nil || a.lastErr.Error() != "connection lost" {
+		t.Errorf("lastErr = %v, want connection lost", a.lastErr)
+	}
+}
+
+func TestSnapshotClearedOnConnLost(t *testing.T) {
+	app := newTestApp()
+	app.connList = []ConnectionPreset{{Name: "primary", DSN: "postgres://p"}}
+	app.currentConn = "primary"
+	app.reconnectFn = func(_ context.Context, _ string) (*core.Poller, error) {
+		return nil, errors.New("connection refused")
+	}
+	app.snapshot = core.Snapshot{PGVersion: "16.1", Activities: []core.Activity{{PID: 1}}}
+
+	model, _ := app.Update(snapshotMsg{PollResult: core.PollResult{Err: errors.New("conn closed")}})
+	a := model.(*App)
+
+	if a.snapshot.PGVersion != "" || len(a.snapshot.Activities) != 0 {
+		t.Error("expected snapshot to be cleared when auto-reconnect starts")
+	}
+}
+
+func TestSnapshotClearedOnReconnectErrMsg(t *testing.T) {
+	app := newTestApp()
+	app.connList = []ConnectionPreset{{Name: "primary", DSN: "postgres://p"}}
+	app.currentConn = "primary"
+	app.reconnectFn = func(_ context.Context, _ string) (*core.Poller, error) {
+		return nil, errors.New("connection refused")
+	}
+	app.snapshot = core.Snapshot{PGVersion: "16.1", Activities: []core.Activity{{PID: 1}}}
+
+	model, _ := app.Update(reconnectErrMsg{name: "primary", dsn: "postgres://p"})
+	a := model.(*App)
+
+	if a.snapshot.PGVersion != "" || len(a.snapshot.Activities) != 0 {
+		t.Error("expected snapshot to be cleared when reconnectErrMsg triggers auto-reconnect")
+	}
+}
+
+func TestConnectionSwitchedAfterGiveUp(t *testing.T) {
+	app := newTestApp()
+	app.autoReconnectGen = 1
+	// Give-up: deadline is in the past
+	model, _ := app.Update(autoReconnectFailedMsg{
+		gen:      1,
+		delay:    time.Second,
+		deadline: time.Now().Add(-time.Second),
+	})
+	a := model.(*App)
+	if a.autoReconnectGen != 2 {
+		t.Errorf("autoReconnectGen = %d, want 2 after give-up", a.autoReconnectGen)
+	}
+	// Stale connectionSwitchedMsg with the old gen should be dropped
+	newPoller := core.NewPoller(&mockQuerier{}, time.Second)
+	model2, cmd := a.Update(connectionSwitchedMsg{poller: newPoller, name: "primary", autoGen: 1})
+	a2 := model2.(*App)
+	if a2.currentConn == "primary" {
+		t.Error("stale connectionSwitchedMsg should be ignored after give-up")
+	}
+	if cmd != nil {
+		t.Error("expected nil cmd for stale connectionSwitchedMsg after give-up")
+	}
+}
