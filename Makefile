@@ -47,11 +47,11 @@ dev-ssl-up:
 	@echo "waiting for postgres-ssl..."
 	@until docker compose exec postgres-ssl pg_isready -q; do sleep 1; done
 	docker compose exec -T postgres-ssl psql -U postgres < dev/loadgen_setup.sql
-	@grep -q '^\[connections\.ssl\]' .pgincident.dev.toml 2>/dev/null || \
-		printf '\n[connections.ssl]\ndsn = "postgres://pgincident_dev:pgincident_dev@localhost:5434/postgres?sslmode=require"\n' >> .pgincident.dev.toml
+	@grep -q '^\[connections\.rds\]' .pgincident.dev.toml 2>/dev/null || \
+		printf '\n[connections.rds]\ndsn = "postgres://pgincident_dev:pgincident_dev@localhost:5434/postgres?sslmode=require"\n' >> .pgincident.dev.toml
 	@echo "ready."
-	@echo "  ssl (port 5434): postgres://pgincident_dev:pgincident_dev@localhost:5434/postgres?sslmode=require"
-	@echo "  [connections.ssl] added to .pgincident.dev.toml"
+	@echo "  rds (port 5434): postgres://pgincident_dev:pgincident_dev@localhost:5434/postgres?sslmode=require"
+	@echo "  [connections.rds] added to .pgincident.dev.toml"
 
 dev-ssl-down:
 	docker compose stop postgres-ssl
