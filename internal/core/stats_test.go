@@ -214,3 +214,39 @@ func TestServerInfoError(t *testing.T) {
 		t.Error("expected error, got nil")
 	}
 }
+
+// --- SSLInfo ---
+
+func TestSSLInfo(t *testing.T) {
+	for _, want := range []bool{true, false} {
+		conn := &mockConn{
+			queryRowFn: func(_ context.Context, _ string, _ ...any) pgx.Row {
+				return &mockPgxRow{
+					scanFn: func(dest ...any) error {
+						*dest[0].(*bool) = want
+						return nil
+					},
+				}
+			},
+		}
+		c := &Client{conn: conn}
+		got, err := c.SSLInfo(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("SSLInfo() = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestSSLInfoError(t *testing.T) {
+	row := &mockPgxRow{
+		scanFn: func(_ ...any) error { return errors.New("query error") },
+	}
+	c := &Client{conn: newQueryRowConn(row)}
+	_, err := c.SSLInfo(context.Background())
+	if err == nil {
+		t.Error("expected error, got nil")
+	}
+}

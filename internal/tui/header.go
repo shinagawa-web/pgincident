@@ -19,6 +19,9 @@ func renderTitleBar(s core.Snapshot, interval time.Duration, connName string, wi
 	} else if s.ServerAddr != "" {
 		left = dimStyle.Render(fmt.Sprintf("%s  PG %s", s.ServerAddr, s.PGVersion))
 	}
+	if s.SSL {
+		left += "  " + sslBadgeStyle.Render("SSL")
+	}
 	right := dimStyle.Render(fmt.Sprintf("interval: %.1fs", interval.Seconds()))
 	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {

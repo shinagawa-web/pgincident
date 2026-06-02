@@ -37,6 +37,7 @@ func writeTOML(t *testing.T, content string) string {
 type mockClient struct{}
 
 func (m *mockClient) ServerInfo(_ context.Context) (string, string, error) { return "", "", nil }
+func (m *mockClient) SSLInfo(_ context.Context) (bool, error)              { return false, nil }
 func (m *mockClient) LongRunning(_ context.Context, _ time.Duration) ([]core.Activity, error) {
 	return nil, nil
 }

@@ -26,4 +26,6 @@ var (
 			Padding(1, 3)
 
 	sqlKeywordStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("75")).Bold(true)
+
+	sslBadgeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("76")).Bold(true)
 )
