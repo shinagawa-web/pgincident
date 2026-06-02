@@ -1473,9 +1473,9 @@ func TestKeyS_WithSnapshot(t *testing.T) {
 
 	// Redirect to a temp dir so we don't write to ~
 	dir := t.TempDir()
-	orig := userHomeDir
-	userHomeDir = func() (string, error) { return dir, nil }
-	defer func() { userHomeDir = orig }()
+	orig := getwd
+	getwd = func() (string, error) { return dir, nil }
+	defer func() { getwd = orig }()
 
 	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 	if cmd == nil {
@@ -1496,9 +1496,9 @@ func TestKeyS_WithSnapshot(t *testing.T) {
 
 func TestWriteSnapshotHomeDirError(t *testing.T) {
 	s := core.Snapshot{CapturedAt: time.Now()}
-	orig := userHomeDir
-	userHomeDir = func() (string, error) { return "", errors.New("no home") }
-	defer func() { userHomeDir = orig }()
+	orig := getwd
+	getwd = func() (string, error) { return "", errors.New("no home") }
+	defer func() { getwd = orig }()
 
 	msg := writeSnapshot(s, "conn")
 	if msg.err == nil || msg.err.Error() != "no home" {
@@ -1514,9 +1514,9 @@ func TestWriteSnapshotWriteError(t *testing.T) {
 	}
 	f.Close()
 
-	orig := userHomeDir
-	userHomeDir = func() (string, error) { return f.Name(), nil }
-	defer func() { userHomeDir = orig }()
+	orig := getwd
+	getwd = func() (string, error) { return f.Name(), nil }
+	defer func() { getwd = orig }()
 
 	s := core.Snapshot{CapturedAt: time.Now()}
 	msg := writeSnapshot(s, "conn")

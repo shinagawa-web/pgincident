@@ -650,12 +650,12 @@ func (a *App) renderConnSelector() string {
 		modalStyle.Render(content))
 }
 
-var userHomeDir = os.UserHomeDir
+var getwd = os.Getwd
 
 func writeSnapshot(s core.Snapshot, conn string) snapshotExportMsg {
 	r := snapshot.Report{Snapshot: s, ConnName: conn}
 	content := snapshot.Generate(r)
-	dir, err := userHomeDir()
+	dir, err := getwd()
 	if err != nil {
 		return snapshotExportMsg{err: err}
 	}
