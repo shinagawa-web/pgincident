@@ -21,7 +21,7 @@
                              │     ↓ / j         cursor down                             │                              
                              │     Enter         query detail overlay (dashboard only)   │                              
                              │     + / -         increase / decrease interval            │                              
-                             │     s             export snapshot to Markdown             │                              
+                             │     s             snapshot export to Markdown             │                              
                              │     ?             this help                               │                              
                              │                                                           │                              
                              │   press any key to close                                  │                              

@@ -471,9 +471,9 @@ func (a *App) sectionLen() int {
 
 // sectionDataRows returns the number of data rows each section can display.
 func (a *App) sectionDataRows() int {
-	// fixed rows: titleBar(1) + statsBar(1) + 4×divider(4) + statusBar(1) + footer(1) = 8
+	// fixed rows: titleBar(1) + statsBar(1) + 4×divider(4) + statusBar(1) + footer(2) = 9
 	// per section overhead: sectionTitle(1) + colHeader(1) = 2 → 3 sections = 6
-	rows := (a.height - 8 - 6) / 3
+	rows := (a.height - 9 - 6) / 3
 	if rows < 3 {
 		return 3
 	}
@@ -572,7 +572,7 @@ func (a *App) renderHelp() string {
 		"  ↓ / j         cursor down\n" +
 		"  Enter         query detail overlay (dashboard only)\n" +
 		"  + / -         increase / decrease interval\n" +
-		"  s             export snapshot to Markdown\n" +
+		"  s             snapshot export to Markdown\n" +
 		connLine +
 		"  ?             this help\n\n" +
 		dimStyle.Render("press any key to close")
