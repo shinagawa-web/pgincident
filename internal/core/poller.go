@@ -11,6 +11,7 @@ const minInterval = 1 * time.Second
 // Querier is the database interface used by Poller.
 type Querier interface {
 	ServerInfo(ctx context.Context) (string, string, error)
+	SSLInfo(ctx context.Context) (bool, error)
 	LongRunning(ctx context.Context, threshold time.Duration) ([]Activity, error)
 	Locks(ctx context.Context) ([]Lock, error)
 	IdleInTx(ctx context.Context, threshold time.Duration) ([]Activity, error)
@@ -34,6 +35,7 @@ type Poller struct {
 	// cached on first capture
 	pgVersion  string
 	serverAddr string
+	ssl        bool
 
 	// TPS state
 	prevXactTotal  int64
@@ -102,6 +104,12 @@ func (p *Poller) capture(ctx context.Context) (Snapshot, error) {
 		}
 		p.pgVersion = v
 		p.serverAddr = a
+
+		ssl, err := p.client.SSLInfo(ctx)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		p.ssl = ssl
 	}
 
 	activities, err := p.client.LongRunning(ctx, p.LongRunningThreshold)
@@ -139,6 +147,7 @@ func (p *Poller) capture(ctx context.Context) (Snapshot, error) {
 		CapturedAt: now,
 		PGVersion:  p.pgVersion,
 		ServerAddr: p.serverAddr,
+		SSL:        p.ssl,
 		DBStats:    stats,
 		Activities: activities,
 		Locks:      locks,

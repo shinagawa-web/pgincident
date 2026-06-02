@@ -823,6 +823,7 @@ type mockQuerier struct{}
 func (m *mockQuerier) ServerInfo(_ context.Context) (string, string, error) {
 	return "16.1", "localhost:5432", nil
 }
+func (m *mockQuerier) SSLInfo(_ context.Context) (bool, error) { return false, nil }
 func (m *mockQuerier) LongRunning(_ context.Context, _ time.Duration) ([]core.Activity, error) {
 	return nil, nil
 }

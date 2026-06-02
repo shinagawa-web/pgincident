@@ -58,6 +58,15 @@ func (c *Client) Stats(ctx context.Context) (DBStats, error) {
 	return s, err
 }
 
+// SSLInfo reports whether the current connection is SSL-encrypted.
+func (c *Client) SSLInfo(ctx context.Context) (bool, error) {
+	var ssl bool
+	err := c.conn.QueryRow(ctx,
+		"SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()",
+	).Scan(&ssl)
+	return ssl, err
+}
+
 // ServerInfo returns the Postgres version string and host:port address.
 func (c *Client) ServerInfo(ctx context.Context) (version, addr string, err error) {
 	err = c.conn.QueryRow(ctx, "SHOW server_version").Scan(&version)

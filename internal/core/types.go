@@ -43,6 +43,7 @@ type Snapshot struct {
 	CapturedAt time.Time
 	PGVersion  string
 	ServerAddr string
+	SSL        bool
 	DBStats    DBStats
 	Activities []Activity // long-running active queries
 	Locks      []Lock     // waiting locks

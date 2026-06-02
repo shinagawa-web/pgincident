@@ -47,6 +47,14 @@ func TestRenderTitleBarWithConnName(t *testing.T) {
 	}
 }
 
+func TestRenderTitleBarSSLBadge(t *testing.T) {
+	s := core.Snapshot{ServerAddr: "localhost:5434", PGVersion: "16.1", SSL: true}
+	out := renderTitleBar(s, time.Second, "rds", 120)
+	if !strings.Contains(out, "SSL") {
+		t.Errorf("expected SSL badge in title bar, got: %q", out)
+	}
+}
+
 func TestRenderStatsBarNoTPS(t *testing.T) {
 	s := core.DBStats{ConnectionsActive: 10, ConnectionsMax: 100, TPS: 0, CacheHitRatio: 0.99}
 	out := renderStatsBar(s, 80)

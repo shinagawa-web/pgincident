@@ -10,6 +10,7 @@ import (
 // mockQuerier implements Querier for unit tests.
 type mockQuerier struct {
 	serverInfo  func(ctx context.Context) (string, string, error)
+	sslInfo     func(ctx context.Context) (bool, error)
 	longRunning func(ctx context.Context, threshold time.Duration) ([]Activity, error)
 	locks       func(ctx context.Context) ([]Lock, error)
 	idleInTx    func(ctx context.Context, threshold time.Duration) ([]Activity, error)
@@ -19,6 +20,7 @@ type mockQuerier struct {
 func (m *mockQuerier) ServerInfo(ctx context.Context) (string, string, error) {
 	return m.serverInfo(ctx)
 }
+func (m *mockQuerier) SSLInfo(ctx context.Context) (bool, error) { return m.sslInfo(ctx) }
 func (m *mockQuerier) LongRunning(ctx context.Context, t time.Duration) ([]Activity, error) {
 	return m.longRunning(ctx, t)
 }
@@ -31,6 +33,7 @@ func (m *mockQuerier) Stats(ctx context.Context) (DBStats, error) { return m.sta
 func defaultMock() *mockQuerier {
 	return &mockQuerier{
 		serverInfo:  func(_ context.Context) (string, string, error) { return "16.1", "localhost:5432", nil },
+		sslInfo:     func(_ context.Context) (bool, error) { return false, nil },
 		longRunning: func(_ context.Context, _ time.Duration) ([]Activity, error) { return nil, nil },
 		locks:       func(_ context.Context) ([]Lock, error) { return nil, nil },
 		idleInTx:    func(_ context.Context, _ time.Duration) ([]Activity, error) { return nil, nil },
@@ -148,6 +151,19 @@ func TestCaptureServerInfoError(t *testing.T) {
 	_, err := p.capture(context.Background())
 	if err == nil {
 		t.Error("expected error from ServerInfo, got nil")
+	}
+}
+
+func TestCaptureSSLInfoError(t *testing.T) {
+	mock := defaultMock()
+	mock.sslInfo = func(_ context.Context) (bool, error) {
+		return false, errors.New("ssl query failed")
+	}
+
+	p := NewPoller(mock, time.Second)
+	_, err := p.capture(context.Background())
+	if err == nil {
+		t.Error("expected error from SSLInfo, got nil")
 	}
 }
 
