@@ -4,3 +4,4 @@ coverage.out
 .pgincident.toml
 .pgincident.dev.toml
 .pgincident/
+/dist/

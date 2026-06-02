@@ -1,0 +1,45 @@
+version: 2
+
+project_name: pgincident
+
+builds:
+  - id: pgincident
+    main: ./cmd/pgincident
+    binary: pgincident
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/shinagawa-web/pgincident/internal/version.Version={{.Version}}
+
+archives:
+  - id: pgincident
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+release:
+  draft: false
+  prerelease: auto
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
