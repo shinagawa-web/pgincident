@@ -97,7 +97,8 @@ jobs:
             -e POSTGRES_PASSWORD=postgres \
             -p 5432:5432 \
             -v "$PWD/dev/init.sql:/docker-entrypoint-initdb.d/init.sql" \
-            postgres-ssl
+            postgres-ssl \
+            postgres -c config_file=/etc/postgresql/postgresql.conf
 
       - name: Wait for Postgres to be ready
         run: until docker exec postgres-ssl pg_isready -U postgres; do sleep 1; done
