@@ -54,12 +54,13 @@ func renderStatus(err error, msg string) string {
 }
 
 func renderFooter(multiConn bool) string {
-	s := "[q]uit  [Tab]section  [↑↓/jk]cursor  [o]overview  [Enter]detail  [+/-]interval"
+	line1 := "[q]uit  [Tab]section  [↑↓/jk]cursor  [o]overview  [Enter]detail"
+	line2 := "[+/-]interval  [s]napshot"
 	if multiConn {
-		s += "  [c]connections"
+		line2 += "  [c]connections"
 	}
-	s += "  [?]help"
-	return footerStyle.Render(s)
+	line2 += "  [?]help"
+	return footerStyle.Render(line1) + "\n" + footerStyle.Render(line2)
 }
 
 // sectionTitle renders a title row with the count badge right-aligned.

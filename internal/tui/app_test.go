@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -1427,5 +1428,99 @@ func TestConnectionSwitchedAfterGiveUp(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Error("expected nil cmd for stale connectionSwitchedMsg after give-up")
+	}
+}
+
+// --- snapshotExportMsg ---
+
+func TestSnapshotExportMsgPath(t *testing.T) {
+	app := newTestApp()
+	model, _ := app.Update(snapshotExportMsg{path: "/home/user/.pgincident/snapshot-20260602-150405.md"})
+	a := model.(*App)
+	if !strings.Contains(a.statusMsg, "saved:") {
+		t.Errorf("expected statusMsg to contain 'saved:', got %q", a.statusMsg)
+	}
+}
+
+func TestSnapshotExportMsgErr(t *testing.T) {
+	app := newTestApp()
+	model, _ := app.Update(snapshotExportMsg{err: errors.New("disk full")})
+	a := model.(*App)
+	if a.lastErr == nil || a.lastErr.Error() != "disk full" {
+		t.Errorf("expected lastErr=disk full, got %v", a.lastErr)
+	}
+}
+
+// --- "s" key ---
+
+func TestKeyS_EmptySnapshot(t *testing.T) {
+	app := newTestApp()
+	// snapshot is zero value → CapturedAt.IsZero() == true → no cmd dispatched
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	if cmd != nil {
+		t.Error("expected nil cmd when snapshot is empty")
+	}
+}
+
+func TestKeyS_WithSnapshot(t *testing.T) {
+	app := newTestApp()
+	app.snapshot = core.Snapshot{
+		CapturedAt: time.Date(2026, 6, 2, 15, 4, 5, 0, time.UTC),
+		PGVersion:  "16.2",
+		ServerAddr: "localhost:5432",
+	}
+	app.currentConn = "production"
+
+	// Redirect to a temp dir so we don't write to ~
+	dir := t.TempDir()
+	orig := getwd
+	getwd = func() (string, error) { return dir, nil }
+	defer func() { getwd = orig }()
+
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	if cmd == nil {
+		t.Fatal("expected a cmd when snapshot is non-empty")
+	}
+	msg := cmd()
+	export, ok := msg.(snapshotExportMsg)
+	if !ok {
+		t.Fatalf("expected snapshotExportMsg, got %T", msg)
+	}
+	if export.err != nil {
+		t.Fatalf("expected no error, got %v", export.err)
+	}
+	if export.path == "" {
+		t.Error("expected non-empty path")
+	}
+}
+
+func TestWriteSnapshotHomeDirError(t *testing.T) {
+	s := core.Snapshot{CapturedAt: time.Now()}
+	orig := getwd
+	getwd = func() (string, error) { return "", errors.New("no home") }
+	defer func() { getwd = orig }()
+
+	msg := writeSnapshot(s, "conn")
+	if msg.err == nil || msg.err.Error() != "no home" {
+		t.Errorf("expected 'no home' error, got %v", msg.err)
+	}
+}
+
+func TestWriteSnapshotWriteError(t *testing.T) {
+	// Make a file where .pgincident dir should go — WriteFile will fail to MkdirAll.
+	f, err := os.CreateTemp(t.TempDir(), "notadir")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	orig := getwd
+	getwd = func() (string, error) { return f.Name(), nil }
+	defer func() { getwd = orig }()
+
+	s := core.Snapshot{CapturedAt: time.Now()}
+	msg := writeSnapshot(s, "conn")
+	if msg.err == nil {
+		t.Error("expected error when dir is a file, got nil")
 	}
 }

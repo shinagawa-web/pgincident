@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/shinagawa-web/pgincident/internal/core"
+	"github.com/shinagawa-web/pgincident/internal/snapshot"
 	"github.com/shinagawa-web/pgincident/internal/version"
 )
 
@@ -42,6 +44,11 @@ type reconnectErrMsg struct {
 	err  error
 	name string
 	dsn  string
+}
+
+type snapshotExportMsg struct {
+	path string
+	err  error
 }
 
 type autoReconnectFailedMsg struct {
@@ -238,6 +245,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return connectionSwitchedMsg{poller: p, name: name, autoGen: gen}
 		})
+	case snapshotExportMsg:
+		if msg.err != nil {
+			a.lastErr = msg.err
+		} else {
+			a.statusMsg = fmt.Sprintf("saved: %s", msg.path)
+		}
 	case tea.KeyMsg:
 		return a.handleKey(msg)
 	}
@@ -324,6 +337,14 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				a.detailItem = act
 				a.detailScroll = 0
 				a.detailLines = nil
+			}
+		}
+	case "s":
+		if !a.snapshot.CapturedAt.IsZero() {
+			snap := a.snapshot
+			conn := a.currentConn
+			return a, func() tea.Msg {
+				return writeSnapshot(snap, conn)
 			}
 		}
 	}
@@ -450,9 +471,9 @@ func (a *App) sectionLen() int {
 
 // sectionDataRows returns the number of data rows each section can display.
 func (a *App) sectionDataRows() int {
-	// fixed rows: titleBar(1) + statsBar(1) + 4×divider(4) + statusBar(1) + footer(1) = 8
+	// fixed rows: titleBar(1) + statsBar(1) + 4×divider(4) + statusBar(1) + footer(2) = 9
 	// per section overhead: sectionTitle(1) + colHeader(1) = 2 → 3 sections = 6
-	rows := (a.height - 8 - 6) / 3
+	rows := (a.height - 9 - 6) / 3
 	if rows < 3 {
 		return 3
 	}
@@ -551,6 +572,7 @@ func (a *App) renderHelp() string {
 		"  ↓ / j         cursor down\n" +
 		"  Enter         query detail overlay (dashboard only)\n" +
 		"  + / -         increase / decrease interval\n" +
+		"  s             snapshot export to Markdown\n" +
 		connLine +
 		"  ?             this help\n\n" +
 		dimStyle.Render("press any key to close")
@@ -626,4 +648,20 @@ func (a *App) renderConnSelector() string {
 	content := strings.Join(lines, "\n")
 	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center,
 		modalStyle.Render(content))
+}
+
+var getwd = os.Getwd
+
+func writeSnapshot(s core.Snapshot, conn string) snapshotExportMsg {
+	r := snapshot.Report{Snapshot: s, ConnName: conn}
+	content := snapshot.Generate(r)
+	dir, err := getwd()
+	if err != nil {
+		return snapshotExportMsg{err: err}
+	}
+	path, err := snapshot.WriteFile(dir, content, s.CapturedAt)
+	if err != nil {
+		return snapshotExportMsg{err: err}
+	}
+	return snapshotExportMsg{path: path}
 }
