@@ -76,3 +76,47 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
 
+  integration-ssl:
+    name: Integration tests (SSL)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build SSL Postgres image
+        run: docker build -t postgres-ssl dev/rds
+
+      - name: Start SSL Postgres
+        run: |
+          docker run -d --name postgres-ssl \
+            -e POSTGRES_PASSWORD=postgres \
+            -p 5432:5432 \
+            -v "$PWD/dev/init.sql:/docker-entrypoint-initdb.d/init.sql" \
+            postgres-ssl
+
+      - name: Wait for Postgres to be ready
+        run: until docker exec postgres-ssl pg_isready -U postgres; do sleep 1; done
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Grant pg_monitor
+        run: psql -h localhost -U postgres -c "GRANT pg_monitor TO postgres"
+        env:
+          PGPASSWORD: postgres
+
+      - name: Verify SSL is active
+        run: |
+          result=$(psql "postgres://postgres:postgres@localhost:5432/postgres?sslmode=require" \
+            -Atc "SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()")
+          [ "$result" = "t" ] || (echo "SSL not active on server" && exit 1)
+
+      - name: Run integration tests
+        run: go test -race -v -timeout 2m -run Integration ./internal/core/...
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=require

@@ -18,3 +18,14 @@ services:
       - "5433:5432"
     volumes:
       - ./dev/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  postgres-ssl:
+    build:
+      context: dev/rds
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./dev/init.sql:/docker-entrypoint-initdb.d/init.sql
