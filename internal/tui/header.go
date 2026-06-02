@@ -54,7 +54,7 @@ func renderStatus(err error, msg string) string {
 }
 
 func renderFooter(multiConn bool) string {
-	s := "[q]uit  [Tab]section  [↑↓/jk]cursor  [o]overview  [Enter]detail  [+/-]interval"
+	s := "[q]uit  [Tab]section  [↑↓/jk]cursor  [o]overview  [Enter]detail  [+/-]interval  [s]export"
 	if multiConn {
 		s += "  [c]connections"
 	}

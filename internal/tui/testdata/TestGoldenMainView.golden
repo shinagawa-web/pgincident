@@ -35,4 +35,4 @@ Connections: 3/100 (3%)   TPS: —   Cache hit: 99.0%
 
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-[q]uit  [Tab]section  [↑↓/jk]cursor  [o]overview  [Enter]detail  [+/-]interval  [?]help
+[q]uit  [Tab]section  [↑↓/jk]cursor  [o]overview  [Enter]detail  [+/-]interval  [s]export  [?]help
