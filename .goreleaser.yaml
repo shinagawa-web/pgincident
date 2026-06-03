@@ -26,6 +26,21 @@ archives:
       - LICENSE
       - README.md
 
+brews:
+  - name: pgincident
+    repository:
+      owner: shinagawa-web
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/shinagawa-web/pgincident"
+    description: "Real-time PostgreSQL incident dashboard for the terminal"
+    license: "MIT"
+    install: |
+      bin.install "pgincident"
+    test: |
+      system "#{bin}/pgincident", "--version"
+
 checksum:
   name_template: checksums.txt
   algorithm: sha256
