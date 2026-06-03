@@ -1,5 +1,9 @@
 # Usage
 
+## Installation
+
+See the [Installation section in the README](../README.md#installation) for Homebrew, binary download, and build-from-source options.
+
 ## Configuration
 
 pgincident looks for a config file in this order:

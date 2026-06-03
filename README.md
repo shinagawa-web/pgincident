@@ -11,6 +11,25 @@ Production Postgres is slow. You open psql and start firing queries — `pg_stat
 
 → **[Usage guide](docs/usage.md)** — startup, screens, key bindings
 
+## Installation
+
+### Homebrew (macOS)
+
+```sh
+brew tap shinagawa-web/tap
+brew install pgincident
+```
+
+### Download binary
+
+Download the latest release from [GitHub Releases](https://github.com/shinagawa-web/pgincident/releases), extract, and place the binary in your `$PATH`.
+
+### Build from source
+
+```sh
+go install github.com/shinagawa-web/pgincident@latest
+```
+
 ## 1. Positioning
 
 Targets SREs and Web engineers who reach for `psql -c "SELECT * FROM pg_stat_activity"` when production gets slow. Opens with a global health overview screen, then lets you drill into per-category incident views — replacing a sequence of manual queries with a two-screen live TUI.
