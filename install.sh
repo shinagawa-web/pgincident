@@ -133,6 +133,7 @@ main() {
     ok "installed ${INSTALL_DIR}/${BINARY}"
 
     # PATH hint
+    # shellcheck disable=SC2016  # $PATH literal is intentional: printed for the user to eval in their own shell
     case ":${PATH}:" in
         *":${INSTALL_DIR}:"*) ;;
         *) printf '\n\033[1;33mnote:\033[0m add %s to your PATH:\n  export PATH="%s:$PATH"\n' "$INSTALL_DIR" "$INSTALL_DIR" ;;
