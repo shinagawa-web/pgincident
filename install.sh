@@ -69,8 +69,9 @@ resolve_install_dir() {
 # ── verify checksum ───────────────────────────────────────────────────────────
 
 verify_checksum() {
-    archive="$1"
-    checksums_file="$2"
+    local archive="$1"
+    local checksums_file="$2"
+    local filename expected actual
 
     filename=$(basename "$archive")
     expected=$(awk -v f="$filename" '$2 == f {print $1}' "$checksums_file")
