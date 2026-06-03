@@ -152,6 +152,41 @@ func TestGenerateIdleInTxEmpty(t *testing.T) {
 	mustContain(t, out, "_none_")
 }
 
+func TestGenerateQueryLinkAndAnchor(t *testing.T) {
+	r := fullReport()
+	out := Generate(r)
+
+	// table cell is a link to the anchor
+	mustContain(t, out, "[SELECT count(*) FROM orders](#query-1001)")
+	// anchor exists in the Full Query Text section
+	mustContain(t, out, `<a id="query-1001"></a>`)
+	// full SQL appears in a fenced code block
+	mustContain(t, out, "```sql\nSELECT count(*) FROM orders\n```")
+}
+
+func TestGenerateIdleInTxLinkAndAnchor(t *testing.T) {
+	r := fullReport()
+	out := Generate(r)
+
+	mustContain(t, out, "[BEGIN](#query-3001)")
+	mustContain(t, out, `<a id="query-3001"></a>`)
+	mustContain(t, out, "```sql\nBEGIN\n```")
+}
+
+func TestGenerateFullQueryUnmodified(t *testing.T) {
+	r := fullReport()
+	r.QueryLimit = 10
+	r.Snapshot.Activities = []core.Activity{
+		{PID: 42, User: "u", Database: "d", State: "active", Query: "SELECT  1\nFROM  foo"},
+	}
+	out := Generate(r)
+
+	// table shows normalized+truncated link text (limit=10: runes[:9]+"…")
+	mustContain(t, out, "[SELECT 1 …](#query-42)")
+	// full query section shows original, unmodified SQL
+	mustContain(t, out, "```sql\nSELECT  1\nFROM  foo\n```")
+}
+
 func TestGenerateQueryTruncation(t *testing.T) {
 	r := fullReport()
 	r.QueryLimit = 10
