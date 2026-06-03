@@ -69,17 +69,24 @@ func Generate(r Report) string {
 		fmt.Fprintf(&b, "| PID | User | Database | State | Duration | Application | Query |\n")
 		fmt.Fprintf(&b, "| --- | --- | --- | --- | --- | --- | --- |\n")
 		for _, a := range s.Activities {
-			fmt.Fprintf(&b, "| %d | %s | %s | %s | %s | %s | %s |\n",
+			cell := mdEscape(truncate(normalizeQuery(a.Query), limit))
+			fmt.Fprintf(&b, "| %d | %s | %s | %s | %s | %s | [%s](#query-%d) |\n",
 				a.PID,
 				mdEscape(a.User),
 				mdEscape(a.Database),
 				mdEscape(a.State),
 				formatDuration(a.Duration),
 				mdEscape(a.Application),
-				mdEscape(truncate(normalizeQuery(a.Query), limit)),
+				cell,
+				a.PID,
 			)
 		}
-		fmt.Fprintf(&b, "\n")
+		fmt.Fprintf(&b, "\n### Full Query Text\n\n")
+		for _, a := range s.Activities {
+			fmt.Fprintf(&b, "<a id=\"query-%d\"></a>\n", a.PID)
+			fmt.Fprintf(&b, "**PID %d** — %s @ %s | %s | %s\n\n", a.PID, a.User, a.Database, a.State, formatDuration(a.Duration))
+			fmt.Fprintf(&b, "```sql\n%s\n```\n\n", a.Query)
+		}
 	}
 
 	// Lock Chains
@@ -110,16 +117,23 @@ func Generate(r Report) string {
 		fmt.Fprintf(&b, "| PID | User | Database | Duration | Application | Query |\n")
 		fmt.Fprintf(&b, "| --- | --- | --- | --- | --- | --- |\n")
 		for _, a := range s.IdleInTx {
-			fmt.Fprintf(&b, "| %d | %s | %s | %s | %s | %s |\n",
+			cell := mdEscape(truncate(normalizeQuery(a.Query), limit))
+			fmt.Fprintf(&b, "| %d | %s | %s | %s | %s | [%s](#query-%d) |\n",
 				a.PID,
 				mdEscape(a.User),
 				mdEscape(a.Database),
 				formatDuration(a.Duration),
 				mdEscape(a.Application),
-				mdEscape(truncate(normalizeQuery(a.Query), limit)),
+				cell,
+				a.PID,
 			)
 		}
-		fmt.Fprintf(&b, "\n")
+		fmt.Fprintf(&b, "\n### Full Query Text\n\n")
+		for _, a := range s.IdleInTx {
+			fmt.Fprintf(&b, "<a id=\"query-%d\"></a>\n", a.PID)
+			fmt.Fprintf(&b, "**PID %d** — %s @ %s | %s\n\n", a.PID, a.User, a.Database, formatDuration(a.Duration))
+			fmt.Fprintf(&b, "```sql\n%s\n```\n\n", a.Query)
+		}
 	}
 
 	return b.String()
@@ -158,9 +172,12 @@ func truncate(s string, n int) string {
 	return string(runes[:n-1]) + "…"
 }
 
-// mdEscape escapes pipe characters so they don't break Markdown tables.
+// mdEscape escapes characters that break Markdown tables or link labels.
 func mdEscape(s string) string {
-	return strings.ReplaceAll(s, "|", "\\|")
+	s = strings.ReplaceAll(s, "|", "\\|")
+	s = strings.ReplaceAll(s, "[", "\\[")
+	s = strings.ReplaceAll(s, "]", "\\]")
+	return s
 }
 
 func formatDuration(d time.Duration) string {
