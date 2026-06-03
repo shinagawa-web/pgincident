@@ -125,3 +125,34 @@ jobs:
         run: go test -race -v -timeout 2m -run Integration ./internal/core/...
         env:
           DATABASE_URL: postgres://pgincident:pgincident@localhost:5432/postgres?sslmode=require
+
+  install-sh:
+    name: install.sh (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run install.sh (latest)
+        run: sh install.sh
+        env:
+          INSTALL_DIR: "${{ runner.temp }}/pgincident-bin"
+
+      - name: Verify binary runs
+        run: "${{ runner.temp }}/pgincident-bin/pgincident" --version
+
+      - name: Run install.sh (pinned version)
+        run: sh install.sh
+        env:
+          VERSION: v0.5.1
+          INSTALL_DIR: "${{ runner.temp }}/pgincident-bin-pinned"
+
+      - name: Verify pinned version
+        run: |
+          out=$("${{ runner.temp }}/pgincident-bin-pinned/pgincident" --version)
+          echo "$out"
+          echo "$out" | grep -q "0.5.1"
