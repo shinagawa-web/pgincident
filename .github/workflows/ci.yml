@@ -66,15 +66,17 @@ jobs:
       - name: Install PostgreSQL client
         run: sudo apt-get install -y postgresql-client
 
-      - name: Grant pg_monitor
-        run: psql -h localhost -U postgres -c "GRANT pg_monitor TO postgres"
+      - name: Create pgincident user
+        run: |
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE USER pgincident WITH PASSWORD 'pgincident'"
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "GRANT pg_monitor TO pgincident"
         env:
           PGPASSWORD: postgres
 
       - name: Run integration tests
         run: go test -race -v -timeout 2m -run Integration ./internal/core/...
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+          DATABASE_URL: postgres://pgincident:pgincident@localhost:5432/postgres
 
   integration-ssl:
     name: Integration tests (SSL)
@@ -106,8 +108,10 @@ jobs:
       - name: Install PostgreSQL client
         run: sudo apt-get install -y postgresql-client
 
-      - name: Grant pg_monitor
-        run: psql -h localhost -U postgres -c "GRANT pg_monitor TO postgres"
+      - name: Create pgincident user
+        run: |
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE USER pgincident WITH PASSWORD 'pgincident'"
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "GRANT pg_monitor TO pgincident"
         env:
           PGPASSWORD: postgres
 
@@ -120,4 +124,4 @@ jobs:
       - name: Run integration tests
         run: go test -race -v -timeout 2m -run Integration ./internal/core/...
         env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=require
+          DATABASE_URL: postgres://pgincident:pgincident@localhost:5432/postgres?sslmode=require
