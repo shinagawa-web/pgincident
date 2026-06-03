@@ -226,6 +226,16 @@ func TestGenerateMDEscape(t *testing.T) {
 	mustContain(t, out, `alice\|bob`)
 }
 
+func TestGenerateQueryLinkEscapesBracket(t *testing.T) {
+	r := fullReport()
+	r.Snapshot.Activities = []core.Activity{
+		{PID: 9, Query: "SELECT a[1] FROM foo"},
+	}
+	out := Generate(r)
+	// [ and ] in link text must be escaped to avoid breaking the link label
+	mustContain(t, out, `[SELECT a\[1\] FROM foo](#query-9)`)
+}
+
 func TestFormatDurationSeconds(t *testing.T) {
 	if got := formatDuration(45 * time.Second); got != "45s" {
 		t.Errorf("got %q, want 45s", got)
