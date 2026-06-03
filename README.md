@@ -29,7 +29,11 @@ curl -fsSL https://raw.githubusercontent.com/shinagawa-web/pgincident/main/insta
 Installs to `~/.local/bin` (or `/usr/local/bin` when run as root). Override with `INSTALL_DIR`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/shinagawa-web/pgincident/main/install.sh | INSTALL_DIR=/usr/local/bin sh
+# Install to a custom user directory
+curl -fsSL https://raw.githubusercontent.com/shinagawa-web/pgincident/main/install.sh | INSTALL_DIR=~/bin sh
+
+# Install system-wide (requires root)
+curl -fsSL https://raw.githubusercontent.com/shinagawa-web/pgincident/main/install.sh | sudo INSTALL_DIR=/usr/local/bin sh
 ```
 
 Pin a specific version with `VERSION`:

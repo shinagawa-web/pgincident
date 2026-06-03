@@ -73,7 +73,7 @@ verify_checksum() {
     checksums_file="$2"
 
     filename=$(basename "$archive")
-    expected=$(grep "  ${filename}$" "$checksums_file" | awk '{print $1}')
+    expected=$(awk -v f="$filename" '$2 == f {print $1}' "$checksums_file")
     [ -n "$expected" ] || die "checksum not found for $filename"
 
     if command -v sha256sum >/dev/null 2>&1; then
@@ -84,7 +84,11 @@ verify_checksum() {
         die "no sha256 tool found (sha256sum or shasum)"
     fi
 
-    [ "$actual" = "$expected" ] || die "checksum mismatch for $filename\n  expected: $expected\n  actual:   $actual"
+    if [ "$actual" != "$expected" ]; then
+        printf '\033[1;31merror:\033[0m checksum mismatch for %s\n  expected: %s\n  actual:   %s\n' \
+            "$filename" "$expected" "$actual" >&2
+        exit 1
+    fi
 }
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -92,6 +96,7 @@ verify_checksum() {
 main() {
     need curl
     need tar
+    need install
 
     OS=$(detect_os)
     ARCH=$(detect_arch)
@@ -103,7 +108,7 @@ main() {
     archive="${BINARY}_${ver}_${OS}_${ARCH}.tar.gz"
     base_url="https://github.com/${REPO}/releases/download/${VERSION}"
 
-    tmpdir=$(mktemp -d)
+    tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/pgincident-XXXXXX")
     trap 'rm -rf "$tmpdir"' EXIT
 
     info "Installing ${BINARY} ${VERSION} (${OS}/${ARCH})"
