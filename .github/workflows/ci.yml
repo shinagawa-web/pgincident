@@ -68,8 +68,8 @@ jobs:
 
       - name: Create pgincident user
         run: |
-          psql -h localhost -U postgres -c "CREATE USER pgincident WITH PASSWORD 'pgincident'"
-          psql -h localhost -U postgres -c "GRANT pg_monitor TO pgincident"
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE USER pgincident WITH PASSWORD 'pgincident'"
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "GRANT pg_monitor TO pgincident"
         env:
           PGPASSWORD: postgres
 
@@ -110,8 +110,8 @@ jobs:
 
       - name: Create pgincident user
         run: |
-          psql -h localhost -U postgres -c "CREATE USER pgincident WITH PASSWORD 'pgincident'"
-          psql -h localhost -U postgres -c "GRANT pg_monitor TO pgincident"
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "CREATE USER pgincident WITH PASSWORD 'pgincident'"
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -c "GRANT pg_monitor TO pgincident"
         env:
           PGPASSWORD: postgres
 
