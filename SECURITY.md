@@ -15,7 +15,7 @@ Only the latest release receives security fixes.
 
 Please report security issues privately via [GitHub Security Advisories](https://github.com/shinagawa-web/pgincident/security/advisories/new).
 
-If you prefer email, contact: kazutomo.deguchi@shinagawa-web.com
+If you prefer email, contact: [security@shinagawa-web.com](mailto:security@shinagawa-web.com)
 
 Include:
 
