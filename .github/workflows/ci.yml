@@ -141,6 +141,7 @@ jobs:
         run: sh install.sh
         env:
           INSTALL_DIR: "${{ runner.temp }}/pgincident-bin"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify binary runs
         run: |
