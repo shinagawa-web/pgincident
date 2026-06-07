@@ -45,9 +45,16 @@ resolve_version() {
         return
     fi
     need curl
-    version=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-        | grep '"tag_name"' \
-        | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
+    if [ -n "${GITHUB_TOKEN:-}" ]; then
+        version=$(curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${REPO}/releases/latest" \
+            | grep '"tag_name"' \
+            | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
+    else
+        version=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+            | grep '"tag_name"' \
+            | sed 's/.*"tag_name": *"\(.*\)".*/\1/')
+    fi
     [ -n "$version" ] || die "could not determine latest version"
     echo "$version"
 }
