@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Usage on pgincident</title><link>https://shinagawa-web.github.io/pgincident/usage/</link><description>Recent content in Usage on pgincident</description><generator>Hugo</generator><language>en-us</language><atom:link href="https://shinagawa-web.github.io/pgincident/usage/index.xml" rel="self" type="application/rss+xml"/><item><title>Overview screen</title><link>https://shinagawa-web.github.io/pgincident/usage/overview-screen/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/usage/overview-screen/</guid><description>&lt;h1 id="overview-screen"&gt;Overview screen&lt;a class="anchor" href="#overview-screen"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;p&gt;The Overview screen is the entry point. It shows global health indicators with status colors so you can tell at a glance whether the database is healthy.&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;primary 10.0.1.42:5432 PG 16.1 interval: 5.0s
+──────────────────────────────────────────────────────────────────────────
+ DB Health Overview
+──────────────────────────────────────────────────────────────────────────
+
+ Metric Value Status
+ ──────────────────────────────────────────────────
+ Connections 142 / 200 (71%) OK
+ TPS 2340 OK
+ Cache hit 99.2% OK
+ Checkpoints req: 0 OK
+ Autovacuum 0 workers OK
+
+──────────────────────────────────────────────────────────────────────────
+[o]dashboard [q]uit [+/-]interval [?]help&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="status-thresholds"&gt;Status thresholds&lt;a class="anchor" href="#status-thresholds"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;Metric&lt;/th&gt;
+					&lt;th&gt;WARN&lt;/th&gt;
+					&lt;th&gt;CRIT&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Connections&lt;/td&gt;
+					&lt;td&gt;≥ 80%&lt;/td&gt;
+					&lt;td&gt;≥ 90%&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;TPS&lt;/td&gt;
+					&lt;td&gt;— (informational)&lt;/td&gt;
+					&lt;td&gt;—&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Cache hit&lt;/td&gt;
+					&lt;td&gt;&amp;lt; 99%&lt;/td&gt;
+					&lt;td&gt;&amp;lt; 95%&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Checkpoints&lt;/td&gt;
+					&lt;td&gt;≥ 10 req/interval&lt;/td&gt;
+					&lt;td&gt;≥ 20 req/interval&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Replication lag&lt;/td&gt;
+					&lt;td&gt;≥ 5 s&lt;/td&gt;
+					&lt;td&gt;≥ 30 s (shown only when standbys exist)&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Autovacuum&lt;/td&gt;
+					&lt;td&gt;≥ 3 workers&lt;/td&gt;
+					&lt;td&gt;≥ 5 workers&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;If any metric shows &lt;strong&gt;WARN&lt;/strong&gt; or &lt;strong&gt;CRIT&lt;/strong&gt;, press &lt;code&gt;o&lt;/code&gt; to switch to the &lt;a href="../dashboard-screen"&gt;Dashboard&lt;/a&gt; and investigate.&lt;/p&gt;</description></item><item><title>Dashboard screen</title><link>https://shinagawa-web.github.io/pgincident/usage/dashboard-screen/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/usage/dashboard-screen/</guid><description>&lt;h1 id="dashboard-screen"&gt;Dashboard screen&lt;a class="anchor" href="#dashboard-screen"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;p&gt;The Dashboard shows three incident categories, each auto-refreshing at the configured interval.&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;primary 10.0.1.42:5432 PG 16.1 interval: 5.0s
+Connections: 142/200 (71%) TPS: 2340 Cache hit: 99.2%
+──────────────────────────────────────────────────────────────────────────
+▶ Long-running queries (&amp;gt; 5s) [1 active]
+ PID USER DURATION STATE QUERY
+ 12345 app_user 00:02:14.32 active SELECT u.* FROM users u JOIN…
+──────────────────────────────────────────────────────────────────────────
+ Locks (waiting) [0 waiting]
+──────────────────────────────────────────────────────────────────────────
+ Idle in transaction (&amp;gt; 30s) [0 idle]
+──────────────────────────────────────────────────────────────────────────
+[q]uit [Tab]section [↑↓/jk]cursor [o]overview [Enter]detail [+/-]interval [?]help&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="sections"&gt;Sections&lt;a class="anchor" href="#sections"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;strong&gt;Long-running queries&lt;/strong&gt; — active queries exceeding the &lt;code&gt;long_running&lt;/code&gt; threshold (default 5 s). Press &lt;code&gt;Enter&lt;/code&gt; on a row to open the &lt;a href="../query-detail"&gt;Query detail overlay&lt;/a&gt;.&lt;/p&gt;</description></item><item><title>Query detail overlay</title><link>https://shinagawa-web.github.io/pgincident/usage/query-detail/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/usage/query-detail/</guid><description>&lt;h1 id="query-detail-overlay"&gt;Query detail overlay&lt;a class="anchor" href="#query-detail-overlay"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;p&gt;Press &lt;code&gt;Enter&lt;/code&gt; on a row in the Long-running queries section to open the full SQL. The query is formatted with clause breaks and keyword highlighting.&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;┌─ Query Detail ──────────────────────────────────────────────────────────┐
+│ PID: 12345 user: app_user duration: 00:02:14.32 state: active │
+│ ─────────────────────────────────────────────────────────────────────── │
+│ SELECT │
+│ u.id, u.name, u.email, │
+│ o.id AS order_id, o.status, o.total_amount │
+│ FROM users u │
+│ JOIN orders o ON o.user_id = u.id │
+│ WHERE u.status = &amp;#39;active&amp;#39; │
+│ AND o.created_at &amp;gt; NOW() - INTERVAL &amp;#39;7 days&amp;#39; │
+│ ORDER BY o.created_at DESC │
+│ LIMIT 100 │
+└─────────────────────────────────────────────────────────────────────────┘
+[any key] close&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;Press &lt;code&gt;↑&lt;/code&gt;/&lt;code&gt;k&lt;/code&gt; or &lt;code&gt;↓&lt;/code&gt;/&lt;code&gt;j&lt;/code&gt; to scroll through long queries. Press any other key to close.&lt;/p&gt;</description></item><item><title>Key bindings</title><link>https://shinagawa-web.github.io/pgincident/usage/key-bindings/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/usage/key-bindings/</guid><description>&lt;h1 id="key-bindings"&gt;Key bindings&lt;a class="anchor" href="#key-bindings"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;h2 id="overview-screen"&gt;Overview screen&lt;a class="anchor" href="#overview-screen"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;Key&lt;/th&gt;
+					&lt;th&gt;Action&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;o&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Switch to Dashboard&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;+&lt;/code&gt; / &lt;code&gt;-&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Increase / decrease refresh interval&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;c&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Open connection selector (only shown when multiple connections are defined)&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;?&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Help overlay&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;q&lt;/code&gt; / &lt;code&gt;Ctrl-C&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Quit&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="dashboard-screen"&gt;Dashboard screen&lt;a class="anchor" href="#dashboard-screen"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;Key&lt;/th&gt;
+					&lt;th&gt;Action&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;o&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Switch to Overview&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;Tab&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Move to next section&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;Shift-Tab&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Move to previous section&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;↑&lt;/code&gt; / &lt;code&gt;k&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Move cursor up&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;↓&lt;/code&gt; / &lt;code&gt;j&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Move cursor down&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;Enter&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Open query detail overlay (Long-running queries only)&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;+&lt;/code&gt; / &lt;code&gt;-&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Increase / decrease refresh interval&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;c&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Open connection selector (only shown when multiple connections are defined)&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;?&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Help overlay&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;q&lt;/code&gt; / &lt;code&gt;Ctrl-C&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Quit&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="connection-selector-overlay"&gt;Connection selector overlay&lt;a class="anchor" href="#connection-selector-overlay"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;Key&lt;/th&gt;
+					&lt;th&gt;Action&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;↑&lt;/code&gt; / &lt;code&gt;k&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Move cursor up&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;↓&lt;/code&gt; / &lt;code&gt;j&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Move cursor down&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;Enter&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Connect to selected connection&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;Esc&lt;/code&gt; / &lt;code&gt;c&lt;/code&gt; / &lt;code&gt;q&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Cancel and close&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="query-detail-overlay"&gt;Query detail overlay&lt;a class="anchor" href="#query-detail-overlay"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;Key&lt;/th&gt;
+					&lt;th&gt;Action&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;↑&lt;/code&gt; / &lt;code&gt;k&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Scroll up&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;↓&lt;/code&gt; / &lt;code&gt;j&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Scroll down&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;any other key&lt;/td&gt;
+					&lt;td&gt;Close overlay&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;</description></item></channel></rss>

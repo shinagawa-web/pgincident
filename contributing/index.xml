@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Contributing on pgincident</title><link>https://shinagawa-web.github.io/pgincident/contributing/</link><description>Recent content in Contributing on pgincident</description><generator>Hugo</generator><language>en-us</language><atom:link href="https://shinagawa-web.github.io/pgincident/contributing/index.xml" rel="self" type="application/rss+xml"/><item><title>Architecture</title><link>https://shinagawa-web.github.io/pgincident/contributing/architecture/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/contributing/architecture/</guid><description>&lt;h1 id="architecture"&gt;Architecture&lt;a class="anchor" href="#architecture"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;p&gt;Three-layer separation:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;pgincident/
+├── cmd/
+│ └── pgincident/
+│ └── main.go # CLI entry — wires core + tui, calls os.Exit
+├── internal/
+│ ├── core/ # DB → Go structs (no formatting, no UI)
+│ │ ├── client.go # pgx connection wrapper
+│ │ ├── activity.go # pg_stat_activity → []Activity
+│ │ ├── locks.go # pg_locks → []Lock
+│ │ ├── stats.go # pg_stat_database → DBStats
+│ │ ├── poller.go # background polling loop
+│ │ └── types.go # Activity, Lock, DBStats, Snapshot
+│ ├── tui/ # Bubble Tea Model/View/Update
+│ │ ├── app.go # root model
+│ │ ├── overview.go # Level 1 overview screen
+│ │ ├── activity_view.go
+│ │ ├── locks_view.go
+│ │ ├── idle_view.go
+│ │ ├── style.go # Lipgloss styles
+│ │ └── format.go # duration / padding helpers
+│ └── version/
+│ └── version.go
+└── .github/workflows/&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="boundary-rules"&gt;Boundary rules&lt;a class="anchor" href="#boundary-rules"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;core&lt;/code&gt; knows nothing about the TUI.&lt;/strong&gt; No lipgloss, no Bubble Tea types, no formatting. Returns plain Go structs and &lt;code&gt;time.Duration&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;tui&lt;/code&gt; knows nothing about the SQL.&lt;/strong&gt; Receives structs from &lt;code&gt;core&lt;/code&gt; and maps them to views.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;main.go&lt;/code&gt; is thin.&lt;/strong&gt; It only wires &lt;code&gt;os.Args&lt;/code&gt;/&lt;code&gt;os.Stdout&lt;/code&gt;/&lt;code&gt;os.Stderr&lt;/code&gt; and calls &lt;code&gt;os.Exit&lt;/code&gt;. All logic lives in &lt;code&gt;internal/&lt;/code&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="update-loop"&gt;Update loop&lt;a class="anchor" href="#update-loop"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;Default interval: 5 seconds. Adjustable with &lt;code&gt;+&lt;/code&gt; / &lt;code&gt;-&lt;/code&gt; (minimum 1 s).&lt;/li&gt;
+&lt;li&gt;Poller runs in a background goroutine and sends &lt;code&gt;PollResult&lt;/code&gt; to the TUI via channel. The TUI never blocks on the DB.&lt;/li&gt;
+&lt;li&gt;Uses &lt;code&gt;time.NewTimer&lt;/code&gt; (not &lt;code&gt;time.After&lt;/code&gt;) to avoid timer leaks.&lt;/li&gt;
+&lt;li&gt;TPS is skipped when &lt;code&gt;XactTotal&lt;/code&gt; goes backward (server restart / &lt;code&gt;pg_stat_reset&lt;/code&gt;).&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="db-load"&gt;DB load&lt;a class="anchor" href="#db-load"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;All polled views (&lt;code&gt;pg_stat_activity&lt;/code&gt;, &lt;code&gt;pg_locks&lt;/code&gt;, &lt;code&gt;pg_stat_database&lt;/code&gt;) read from shared memory with no disk I/O. Each query typically completes in &amp;lt; 1 ms; total overhead is a few ms/s (&amp;lt; 0.1% CPU). A single persistent connection is reused — no per-poll connection cost.&lt;/p&gt;</description></item><item><title>Incident scenarios</title><link>https://shinagawa-web.github.io/pgincident/contributing/incident-scenarios/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/contributing/incident-scenarios/</guid><description>&lt;h1 id="incident-scenarios"&gt;Incident scenarios&lt;a class="anchor" href="#incident-scenarios"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;p&gt;Manual steps to trigger each dashboard section in the dev environment. Run &lt;code&gt;make dev-up&lt;/code&gt; first.&lt;/p&gt;
+&lt;h2 id="long-running-query--5-s"&gt;Long-running query (&amp;gt; 5 s)&lt;a class="anchor" href="#long-running-query--5-s"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;Terminal 1 — run a query that sleeps for 60 s:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-sh" data-lang="sh"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;docker compose exec -T postgres psql -U postgres -c &lt;span style="color:#ae81ff"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#e6db74"&gt;&amp;#34;SELECT pg_sleep(60);&amp;#34;&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;Terminal 2 — run the TUI and verify the Long-running queries section shows the row:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-sh" data-lang="sh"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;make run&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;Press &lt;code&gt;↓&lt;/code&gt;/&lt;code&gt;j&lt;/code&gt; to select the row, then &lt;code&gt;Enter&lt;/code&gt; to open the query detail overlay. Press &lt;code&gt;↑&lt;/code&gt;/&lt;code&gt;↓&lt;/code&gt; to scroll.&lt;/p&gt;</description></item></channel></rss>

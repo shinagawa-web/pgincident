@@ -1,0 +1,15 @@
+{
+  "name": "pgincident",
+  "short_name": "pgincident",
+  "start_url": "/pgincident/",
+  "scope": "/pgincident/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "/pgincident/favicon.svg",
+      "sizes": "512x512"
+    }
+  ]
+}

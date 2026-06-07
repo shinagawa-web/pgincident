@@ -1,0 +1,365 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>pgincident</title><link>https://shinagawa-web.github.io/pgincident/</link><description>Recent content on pgincident</description><generator>Hugo</generator><language>en-us</language><atom:link href="https://shinagawa-web.github.io/pgincident/index.xml" rel="self" type="application/rss+xml"/><item><title>Architecture</title><link>https://shinagawa-web.github.io/pgincident/contributing/architecture/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/contributing/architecture/</guid><description>&lt;h1 id="architecture"&gt;Architecture&lt;a class="anchor" href="#architecture"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;p&gt;Three-layer separation:&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;pgincident/
+├── cmd/
+│ └── pgincident/
+│ └── main.go # CLI entry — wires core + tui, calls os.Exit
+├── internal/
+│ ├── core/ # DB → Go structs (no formatting, no UI)
+│ │ ├── client.go # pgx connection wrapper
+│ │ ├── activity.go # pg_stat_activity → []Activity
+│ │ ├── locks.go # pg_locks → []Lock
+│ │ ├── stats.go # pg_stat_database → DBStats
+│ │ ├── poller.go # background polling loop
+│ │ └── types.go # Activity, Lock, DBStats, Snapshot
+│ ├── tui/ # Bubble Tea Model/View/Update
+│ │ ├── app.go # root model
+│ │ ├── overview.go # Level 1 overview screen
+│ │ ├── activity_view.go
+│ │ ├── locks_view.go
+│ │ ├── idle_view.go
+│ │ ├── style.go # Lipgloss styles
+│ │ └── format.go # duration / padding helpers
+│ └── version/
+│ └── version.go
+└── .github/workflows/&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="boundary-rules"&gt;Boundary rules&lt;a class="anchor" href="#boundary-rules"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;core&lt;/code&gt; knows nothing about the TUI.&lt;/strong&gt; No lipgloss, no Bubble Tea types, no formatting. Returns plain Go structs and &lt;code&gt;time.Duration&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;tui&lt;/code&gt; knows nothing about the SQL.&lt;/strong&gt; Receives structs from &lt;code&gt;core&lt;/code&gt; and maps them to views.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;&lt;code&gt;main.go&lt;/code&gt; is thin.&lt;/strong&gt; It only wires &lt;code&gt;os.Args&lt;/code&gt;/&lt;code&gt;os.Stdout&lt;/code&gt;/&lt;code&gt;os.Stderr&lt;/code&gt; and calls &lt;code&gt;os.Exit&lt;/code&gt;. All logic lives in &lt;code&gt;internal/&lt;/code&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="update-loop"&gt;Update loop&lt;a class="anchor" href="#update-loop"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;Default interval: 5 seconds. Adjustable with &lt;code&gt;+&lt;/code&gt; / &lt;code&gt;-&lt;/code&gt; (minimum 1 s).&lt;/li&gt;
+&lt;li&gt;Poller runs in a background goroutine and sends &lt;code&gt;PollResult&lt;/code&gt; to the TUI via channel. The TUI never blocks on the DB.&lt;/li&gt;
+&lt;li&gt;Uses &lt;code&gt;time.NewTimer&lt;/code&gt; (not &lt;code&gt;time.After&lt;/code&gt;) to avoid timer leaks.&lt;/li&gt;
+&lt;li&gt;TPS is skipped when &lt;code&gt;XactTotal&lt;/code&gt; goes backward (server restart / &lt;code&gt;pg_stat_reset&lt;/code&gt;).&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="db-load"&gt;DB load&lt;a class="anchor" href="#db-load"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;All polled views (&lt;code&gt;pg_stat_activity&lt;/code&gt;, &lt;code&gt;pg_locks&lt;/code&gt;, &lt;code&gt;pg_stat_database&lt;/code&gt;) read from shared memory with no disk I/O. Each query typically completes in &amp;lt; 1 ms; total overhead is a few ms/s (&amp;lt; 0.1% CPU). A single persistent connection is reused — no per-poll connection cost.&lt;/p&gt;</description></item><item><title>Installation</title><link>https://shinagawa-web.github.io/pgincident/installation/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/installation/</guid><description>&lt;h1 id="installation"&gt;Installation&lt;a class="anchor" href="#installation"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;h2 id="homebrew-macos"&gt;Homebrew (macOS)&lt;a class="anchor" href="#homebrew-macos"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-sh" data-lang="sh"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;brew tap shinagawa-web/tap
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;brew install pgincident&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="linux--macos-one-line-installer"&gt;Linux / macOS (one-line installer)&lt;a class="anchor" href="#linux--macos-one-line-installer"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-sh" data-lang="sh"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;curl -fsSL https://raw.githubusercontent.com/shinagawa-web/pgincident/main/install.sh | sh&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;Installs to &lt;code&gt;~/.local/bin&lt;/code&gt; (or &lt;code&gt;/usr/local/bin&lt;/code&gt; when run as root). Override with &lt;code&gt;INSTALL_DIR&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-sh" data-lang="sh"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;# Install to a custom directory&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;curl -fsSL https://raw.githubusercontent.com/shinagawa-web/pgincident/main/install.sh | INSTALL_DIR&lt;span style="color:#f92672"&gt;=&lt;/span&gt;~/bin sh
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;# Install system-wide (requires root)&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;curl -fsSL https://raw.githubusercontent.com/shinagawa-web/pgincident/main/install.sh | sudo INSTALL_DIR&lt;span style="color:#f92672"&gt;=&lt;/span&gt;/usr/local/bin sh&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;Pin a specific version with &lt;code&gt;VERSION&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-sh" data-lang="sh"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;curl -fsSL https://raw.githubusercontent.com/shinagawa-web/pgincident/main/install.sh | VERSION&lt;span style="color:#f92672"&gt;=&lt;/span&gt;v0.5.1 sh&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="download-binary"&gt;Download binary&lt;a class="anchor" href="#download-binary"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;Download the latest release from &lt;a href="https://github.com/shinagawa-web/pgincident/releases"&gt;GitHub Releases&lt;/a&gt;, extract, and place the binary in your &lt;code&gt;$PATH&lt;/code&gt;.&lt;/p&gt;</description></item><item><title>Overview screen</title><link>https://shinagawa-web.github.io/pgincident/usage/overview-screen/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/usage/overview-screen/</guid><description>&lt;h1 id="overview-screen"&gt;Overview screen&lt;a class="anchor" href="#overview-screen"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;p&gt;The Overview screen is the entry point. It shows global health indicators with status colors so you can tell at a glance whether the database is healthy.&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;primary 10.0.1.42:5432 PG 16.1 interval: 5.0s
+──────────────────────────────────────────────────────────────────────────
+ DB Health Overview
+──────────────────────────────────────────────────────────────────────────
+
+ Metric Value Status
+ ──────────────────────────────────────────────────
+ Connections 142 / 200 (71%) OK
+ TPS 2340 OK
+ Cache hit 99.2% OK
+ Checkpoints req: 0 OK
+ Autovacuum 0 workers OK
+
+──────────────────────────────────────────────────────────────────────────
+[o]dashboard [q]uit [+/-]interval [?]help&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="status-thresholds"&gt;Status thresholds&lt;a class="anchor" href="#status-thresholds"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;Metric&lt;/th&gt;
+					&lt;th&gt;WARN&lt;/th&gt;
+					&lt;th&gt;CRIT&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Connections&lt;/td&gt;
+					&lt;td&gt;≥ 80%&lt;/td&gt;
+					&lt;td&gt;≥ 90%&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;TPS&lt;/td&gt;
+					&lt;td&gt;— (informational)&lt;/td&gt;
+					&lt;td&gt;—&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Cache hit&lt;/td&gt;
+					&lt;td&gt;&amp;lt; 99%&lt;/td&gt;
+					&lt;td&gt;&amp;lt; 95%&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Checkpoints&lt;/td&gt;
+					&lt;td&gt;≥ 10 req/interval&lt;/td&gt;
+					&lt;td&gt;≥ 20 req/interval&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Replication lag&lt;/td&gt;
+					&lt;td&gt;≥ 5 s&lt;/td&gt;
+					&lt;td&gt;≥ 30 s (shown only when standbys exist)&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Autovacuum&lt;/td&gt;
+					&lt;td&gt;≥ 3 workers&lt;/td&gt;
+					&lt;td&gt;≥ 5 workers&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;If any metric shows &lt;strong&gt;WARN&lt;/strong&gt; or &lt;strong&gt;CRIT&lt;/strong&gt;, press &lt;code&gt;o&lt;/code&gt; to switch to the &lt;a href="../dashboard-screen"&gt;Dashboard&lt;/a&gt; and investigate.&lt;/p&gt;</description></item><item><title>Configuration</title><link>https://shinagawa-web.github.io/pgincident/configuration/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/configuration/</guid><description>&lt;h1 id="configuration"&gt;Configuration&lt;a class="anchor" href="#configuration"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;p&gt;pgincident looks for a config file in this order:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Path given by &lt;code&gt;--config PATH&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;.pgincident.toml&lt;/code&gt; in the current directory&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;~/.pgincident.toml&lt;/code&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;Run &lt;code&gt;--init&lt;/code&gt; to generate a config file with defaults:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-sh" data-lang="sh"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;pgincident --init
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#75715e"&gt;# Created /your/project/.pgincident.toml&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="minimal-config"&gt;Minimal config&lt;a class="anchor" href="#minimal-config"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-toml" data-lang="toml"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;[&lt;span style="color:#a6e22e"&gt;connections&lt;/span&gt;.&lt;span style="color:#a6e22e"&gt;default&lt;/span&gt;]
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;dsn&lt;/span&gt; = &lt;span style="color:#e6db74"&gt;&amp;#34;postgres://user:password@localhost:5432/mydb&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;[&lt;span style="color:#a6e22e"&gt;thresholds&lt;/span&gt;]
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;long_running&lt;/span&gt; = &lt;span style="color:#e6db74"&gt;&amp;#34;5s&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;idle_in_transaction&lt;/span&gt; = &lt;span style="color:#e6db74"&gt;&amp;#34;30s&amp;#34;&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;h2 id="multiple-connections"&gt;Multiple connections&lt;a class="anchor" href="#multiple-connections"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;Define multiple connection presets and switch between them at runtime with &lt;code&gt;c&lt;/code&gt;:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-toml" data-lang="toml"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;[&lt;span style="color:#a6e22e"&gt;connections&lt;/span&gt;.&lt;span style="color:#a6e22e"&gt;primary&lt;/span&gt;]
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;dsn&lt;/span&gt; = &lt;span style="color:#e6db74"&gt;&amp;#34;postgres://user:password@primary:5432/mydb&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;[&lt;span style="color:#a6e22e"&gt;connections&lt;/span&gt;.&lt;span style="color:#a6e22e"&gt;replica&lt;/span&gt;]
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;dsn&lt;/span&gt; = &lt;span style="color:#e6db74"&gt;&amp;#34;postgres://user:password@replica:5432/mydb&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;[&lt;span style="color:#a6e22e"&gt;thresholds&lt;/span&gt;]
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;long_running&lt;/span&gt; = &lt;span style="color:#e6db74"&gt;&amp;#34;5s&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#a6e22e"&gt;idle_in_transaction&lt;/span&gt; = &lt;span style="color:#e6db74"&gt;&amp;#34;30s&amp;#34;&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;pgincident connects to the first connection defined in the file on startup. Only one database is active at any time — switching closes the existing connection before opening the new one.&lt;/p&gt;</description></item><item><title>Dashboard screen</title><link>https://shinagawa-web.github.io/pgincident/usage/dashboard-screen/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/usage/dashboard-screen/</guid><description>&lt;h1 id="dashboard-screen"&gt;Dashboard screen&lt;a class="anchor" href="#dashboard-screen"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;p&gt;The Dashboard shows three incident categories, each auto-refreshing at the configured interval.&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;primary 10.0.1.42:5432 PG 16.1 interval: 5.0s
+Connections: 142/200 (71%) TPS: 2340 Cache hit: 99.2%
+──────────────────────────────────────────────────────────────────────────
+▶ Long-running queries (&amp;gt; 5s) [1 active]
+ PID USER DURATION STATE QUERY
+ 12345 app_user 00:02:14.32 active SELECT u.* FROM users u JOIN…
+──────────────────────────────────────────────────────────────────────────
+ Locks (waiting) [0 waiting]
+──────────────────────────────────────────────────────────────────────────
+ Idle in transaction (&amp;gt; 30s) [0 idle]
+──────────────────────────────────────────────────────────────────────────
+[q]uit [Tab]section [↑↓/jk]cursor [o]overview [Enter]detail [+/-]interval [?]help&lt;/code&gt;&lt;/pre&gt;&lt;h2 id="sections"&gt;Sections&lt;a class="anchor" href="#sections"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;strong&gt;Long-running queries&lt;/strong&gt; — active queries exceeding the &lt;code&gt;long_running&lt;/code&gt; threshold (default 5 s). Press &lt;code&gt;Enter&lt;/code&gt; on a row to open the &lt;a href="../query-detail"&gt;Query detail overlay&lt;/a&gt;.&lt;/p&gt;</description></item><item><title>Incident scenarios</title><link>https://shinagawa-web.github.io/pgincident/contributing/incident-scenarios/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/contributing/incident-scenarios/</guid><description>&lt;h1 id="incident-scenarios"&gt;Incident scenarios&lt;a class="anchor" href="#incident-scenarios"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;p&gt;Manual steps to trigger each dashboard section in the dev environment. Run &lt;code&gt;make dev-up&lt;/code&gt; first.&lt;/p&gt;
+&lt;h2 id="long-running-query--5-s"&gt;Long-running query (&amp;gt; 5 s)&lt;a class="anchor" href="#long-running-query--5-s"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;Terminal 1 — run a query that sleeps for 60 s:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-sh" data-lang="sh"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;docker compose exec -T postgres psql -U postgres -c &lt;span style="color:#ae81ff"&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style="display:flex;"&gt;&lt;span&gt; &lt;span style="color:#e6db74"&gt;&amp;#34;SELECT pg_sleep(60);&amp;#34;&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;Terminal 2 — run the TUI and verify the Long-running queries section shows the row:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-sh" data-lang="sh"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;make run&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;Press &lt;code&gt;↓&lt;/code&gt;/&lt;code&gt;j&lt;/code&gt; to select the row, then &lt;code&gt;Enter&lt;/code&gt; to open the query detail overlay. Press &lt;code&gt;↑&lt;/code&gt;/&lt;code&gt;↓&lt;/code&gt; to scroll.&lt;/p&gt;</description></item><item><title>Query detail overlay</title><link>https://shinagawa-web.github.io/pgincident/usage/query-detail/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/usage/query-detail/</guid><description>&lt;h1 id="query-detail-overlay"&gt;Query detail overlay&lt;a class="anchor" href="#query-detail-overlay"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;p&gt;Press &lt;code&gt;Enter&lt;/code&gt; on a row in the Long-running queries section to open the full SQL. The query is formatted with clause breaks and keyword highlighting.&lt;/p&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;┌─ Query Detail ──────────────────────────────────────────────────────────┐
+│ PID: 12345 user: app_user duration: 00:02:14.32 state: active │
+│ ─────────────────────────────────────────────────────────────────────── │
+│ SELECT │
+│ u.id, u.name, u.email, │
+│ o.id AS order_id, o.status, o.total_amount │
+│ FROM users u │
+│ JOIN orders o ON o.user_id = u.id │
+│ WHERE u.status = &amp;#39;active&amp;#39; │
+│ AND o.created_at &amp;gt; NOW() - INTERVAL &amp;#39;7 days&amp;#39; │
+│ ORDER BY o.created_at DESC │
+│ LIMIT 100 │
+└─────────────────────────────────────────────────────────────────────────┘
+[any key] close&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;Press &lt;code&gt;↑&lt;/code&gt;/&lt;code&gt;k&lt;/code&gt; or &lt;code&gt;↓&lt;/code&gt;/&lt;code&gt;j&lt;/code&gt; to scroll through long queries. Press any other key to close.&lt;/p&gt;</description></item><item><title>Key bindings</title><link>https://shinagawa-web.github.io/pgincident/usage/key-bindings/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/usage/key-bindings/</guid><description>&lt;h1 id="key-bindings"&gt;Key bindings&lt;a class="anchor" href="#key-bindings"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;h2 id="overview-screen"&gt;Overview screen&lt;a class="anchor" href="#overview-screen"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;Key&lt;/th&gt;
+					&lt;th&gt;Action&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;o&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Switch to Dashboard&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;+&lt;/code&gt; / &lt;code&gt;-&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Increase / decrease refresh interval&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;c&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Open connection selector (only shown when multiple connections are defined)&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;?&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Help overlay&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;q&lt;/code&gt; / &lt;code&gt;Ctrl-C&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Quit&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="dashboard-screen"&gt;Dashboard screen&lt;a class="anchor" href="#dashboard-screen"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;Key&lt;/th&gt;
+					&lt;th&gt;Action&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;o&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Switch to Overview&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;Tab&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Move to next section&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;Shift-Tab&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Move to previous section&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;↑&lt;/code&gt; / &lt;code&gt;k&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Move cursor up&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;↓&lt;/code&gt; / &lt;code&gt;j&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Move cursor down&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;Enter&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Open query detail overlay (Long-running queries only)&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;+&lt;/code&gt; / &lt;code&gt;-&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Increase / decrease refresh interval&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;c&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Open connection selector (only shown when multiple connections are defined)&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;?&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Help overlay&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;q&lt;/code&gt; / &lt;code&gt;Ctrl-C&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Quit&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="connection-selector-overlay"&gt;Connection selector overlay&lt;a class="anchor" href="#connection-selector-overlay"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;Key&lt;/th&gt;
+					&lt;th&gt;Action&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;↑&lt;/code&gt; / &lt;code&gt;k&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Move cursor up&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;↓&lt;/code&gt; / &lt;code&gt;j&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Move cursor down&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;Enter&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Connect to selected connection&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;Esc&lt;/code&gt; / &lt;code&gt;c&lt;/code&gt; / &lt;code&gt;q&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Cancel and close&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="query-detail-overlay"&gt;Query detail overlay&lt;a class="anchor" href="#query-detail-overlay"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;Key&lt;/th&gt;
+					&lt;th&gt;Action&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;↑&lt;/code&gt; / &lt;code&gt;k&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Scroll up&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;&lt;code&gt;↓&lt;/code&gt; / &lt;code&gt;j&lt;/code&gt;&lt;/td&gt;
+					&lt;td&gt;Scroll down&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;any other key&lt;/td&gt;
+					&lt;td&gt;Close overlay&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;</description></item><item><title>PostgreSQL setup</title><link>https://shinagawa-web.github.io/pgincident/postgres-setup/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/postgres-setup/</guid><description>&lt;h1 id="postgresql-setup"&gt;PostgreSQL setup&lt;a class="anchor" href="#postgresql-setup"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;h2 id="required-privilege-pg_monitor"&gt;Required privilege: &lt;code&gt;pg_monitor&lt;/code&gt;&lt;a class="anchor" href="#required-privilege-pg_monitor"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;pgincident uses &lt;code&gt;pg_monitor&lt;/code&gt; instead of &lt;code&gt;SUPERUSER&lt;/code&gt;. This makes it work on managed databases (RDS, Cloud SQL, Aurora) where superuser access is not available.&lt;/p&gt;
+&lt;p&gt;Grant the role to your user:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-sql" data-lang="sql"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;GRANT&lt;/span&gt; pg_monitor &lt;span style="color:#66d9ef"&gt;TO&lt;/span&gt; your_user;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;pgincident checks &lt;code&gt;pg_monitor&lt;/code&gt; membership at startup. If the user is not a member, the tool exits with an actionable message including the grant command.&lt;/p&gt;
+&lt;h2 id="raising-track_activity_query_size"&gt;Raising &lt;code&gt;track_activity_query_size&lt;/code&gt;&lt;a class="anchor" href="#raising-track_activity_query_size"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;PostgreSQL truncates &lt;code&gt;pg_stat_activity.query&lt;/code&gt; at &lt;code&gt;track_activity_query_size&lt;/code&gt; bytes. The default is &lt;strong&gt;1024 bytes&lt;/strong&gt;, which cuts off long queries in the &lt;a href="usage/query-detail"&gt;query detail overlay&lt;/a&gt;.&lt;/p&gt;</description></item><item><title>Why pgincident?</title><link>https://shinagawa-web.github.io/pgincident/why-pgincident/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/why-pgincident/</guid><description>&lt;h1 id="why-pgincident"&gt;Why pgincident?&lt;a class="anchor" href="#why-pgincident"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;h2 id="comparison"&gt;Comparison&lt;a class="anchor" href="#comparison"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;table&gt;
+	&lt;thead&gt;
+			&lt;tr&gt;
+					&lt;th&gt;&lt;/th&gt;
+					&lt;th&gt;pgcenter&lt;/th&gt;
+					&lt;th&gt;pg_activity&lt;/th&gt;
+					&lt;th&gt;pgincident&lt;/th&gt;
+			&lt;/tr&gt;
+	&lt;/thead&gt;
+	&lt;tbody&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Language&lt;/td&gt;
+					&lt;td&gt;Go&lt;/td&gt;
+					&lt;td&gt;Python&lt;/td&gt;
+					&lt;td&gt;Go&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;OS&lt;/td&gt;
+					&lt;td&gt;Linux only&lt;/td&gt;
+					&lt;td&gt;Linux/Mac&lt;/td&gt;
+					&lt;td&gt;Linux + Mac&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Required privilege&lt;/td&gt;
+					&lt;td&gt;SUPERUSER&lt;/td&gt;
+					&lt;td&gt;SUPERUSER&lt;/td&gt;
+					&lt;td&gt;&lt;strong&gt;&lt;code&gt;pg_monitor&lt;/code&gt;&lt;/strong&gt;&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Managed DB (RDS, Cloud SQL)&lt;/td&gt;
+					&lt;td&gt;partial&lt;/td&gt;
+					&lt;td&gt;partial&lt;/td&gt;
+					&lt;td&gt;&lt;strong&gt;first-class&lt;/strong&gt;&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Focus&lt;/td&gt;
+					&lt;td&gt;comprehensive stats&lt;/td&gt;
+					&lt;td&gt;top-style activity&lt;/td&gt;
+					&lt;td&gt;&lt;strong&gt;incident response&lt;/strong&gt;&lt;/td&gt;
+			&lt;/tr&gt;
+			&lt;tr&gt;
+					&lt;td&gt;Post-mortem export&lt;/td&gt;
+					&lt;td&gt;no&lt;/td&gt;
+					&lt;td&gt;no&lt;/td&gt;
+					&lt;td&gt;planned&lt;/td&gt;
+			&lt;/tr&gt;
+	&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;h2 id="three-design-decisions"&gt;Three design decisions&lt;a class="anchor" href="#three-design-decisions"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;&lt;strong&gt;1. &lt;code&gt;pg_monitor&lt;/code&gt; instead of SUPERUSER&lt;/strong&gt; — unlocks managed PostgreSQL (RDS, Cloud SQL, Aurora). Most production databases don&amp;rsquo;t give you superuser. pgincident is designed for that reality.&lt;/p&gt;</description></item><item><title>Troubleshooting</title><link>https://shinagawa-web.github.io/pgincident/troubleshooting/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://shinagawa-web.github.io/pgincident/troubleshooting/</guid><description>&lt;h1 id="troubleshooting"&gt;Troubleshooting&lt;a class="anchor" href="#troubleshooting"&gt;#&lt;/a&gt;&lt;/h1&gt;
+&lt;h2 id="connection-refused--wrong-dsn"&gt;Connection refused / wrong DSN&lt;a class="anchor" href="#connection-refused--wrong-dsn"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;failed to connect: dial tcp ...: connect: connection refused&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;Check that the DSN in &lt;code&gt;.pgincident.toml&lt;/code&gt; points to the correct host and port, and that the database is reachable from your machine.&lt;/p&gt;
+&lt;h2 id="permission-denied-pg_monitor"&gt;Permission denied (&lt;code&gt;pg_monitor&lt;/code&gt;)&lt;a class="anchor" href="#permission-denied-pg_monitor"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;pre tabindex="0"&gt;&lt;code&gt;ERROR: permission denied for view pg_stat_activity
+hint: GRANT pg_monitor TO your_user;&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;pgincident requires the &lt;code&gt;pg_monitor&lt;/code&gt; role. Grant it and reconnect:&lt;/p&gt;
+&lt;div class="highlight"&gt;&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;-webkit-text-size-adjust:none;"&gt;&lt;code class="language-sql" data-lang="sql"&gt;&lt;span style="display:flex;"&gt;&lt;span&gt;&lt;span style="color:#66d9ef"&gt;GRANT&lt;/span&gt; pg_monitor &lt;span style="color:#66d9ef"&gt;TO&lt;/span&gt; your_user;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;p&gt;See &lt;a href="postgres-setup"&gt;PostgreSQL setup&lt;/a&gt; for details.&lt;/p&gt;
+&lt;h2 id="terminal-too-small"&gt;Terminal too small&lt;a class="anchor" href="#terminal-too-small"&gt;#&lt;/a&gt;&lt;/h2&gt;
+&lt;p&gt;pgincident requires a minimum terminal size of &lt;strong&gt;80 columns × 24 rows&lt;/strong&gt;. Below this, a warning screen is shown instead of the dashboard. Resize your terminal window and the TUI will recover automatically.&lt;/p&gt;</description></item></channel></rss>
