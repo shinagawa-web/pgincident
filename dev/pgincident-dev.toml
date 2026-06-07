@@ -1,0 +1,6 @@
+[connections.default]
+dsn = "postgres://postgres:postgres@localhost:5432/postgres"
+
+[thresholds]
+long_running        = "3s"
+idle_in_transaction = "10s"
