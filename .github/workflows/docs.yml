@@ -12,9 +12,6 @@ on:
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -22,6 +19,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,13 +35,12 @@ jobs:
           hugo-version: "0.162.1"
           extended: true
 
-      - uses: actions/configure-pages@v5
-
       - name: Build
         run: hugo --minify
         working-directory: docs
 
       - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
         with:
           path: docs/public
 
