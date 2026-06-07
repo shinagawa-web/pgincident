@@ -1,5 +1,5 @@
 [connections.default]
-dsn = "postgres://postgres:postgres@localhost:5432/postgres"
+dsn = "postgres://pgincident_dev:pgincident_dev@localhost:5432/postgres"
 
 [thresholds]
 long_running        = "3s"

@@ -1,7 +1,7 @@
 # pgincident demo
-# Prerequisites: docker compose up -d && make dev-load (running in another terminal)
+# Run via: ./scripts/record-demo.sh
 
-Output demo.gif
+Output docs/demo.gif
 
 Set FontSize 14
 Set Width 1200
@@ -10,7 +10,7 @@ Set Theme "Dracula"
 Set Shell "bash"
 
 # Start pgincident with the dev config
-Type "pgincident --config dev/pgincident-dev.toml"
+Type "./pgincident --config dev/pgincident-dev.toml"
 Sleep 500ms
 Enter
 

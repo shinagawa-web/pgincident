@@ -8,7 +8,11 @@ go build -o pgincident ./cmd/pgincident
 
 echo "==> Starting Postgres..."
 docker compose up -d postgres
-sleep 3
+
+echo "==> Waiting for Postgres to be ready..."
+until docker compose exec -T postgres pg_isready -U postgres -q; do
+  sleep 1
+done
 
 echo "==> Starting load generator..."
 docker compose exec -T postgres psql -U postgres < dev/loadgen_setup.sql
@@ -22,4 +26,4 @@ sleep 5
 echo "==> Recording demo..."
 vhs demo.tape
 
-echo "==> Done! -> demo.gif"
+echo "==> Done! -> docs/demo.gif"
