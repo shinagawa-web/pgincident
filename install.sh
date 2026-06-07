@@ -1,4 +1,5 @@
 #!/bin/sh
+# shellcheck disable=SC3043  # 'local' is undefined in POSIX sh but universally supported in dash/busybox/bash
 set -eu
 
 REPO="shinagawa-web/pgincident"
@@ -142,7 +143,10 @@ main() {
     # PATH hint
     case ":${PATH}:" in
         *":${INSTALL_DIR}:"*) ;;
-        *) printf '\n\033[1;33mnote:\033[0m add %s to your PATH:\n  export PATH="%s:$PATH"\n' "$INSTALL_DIR" "$INSTALL_DIR" ;;
+        *)
+            # shellcheck disable=SC2016  # $PATH literal is intentional: displayed for the user to eval in their own shell
+            printf '\n\033[1;33mnote:\033[0m add %s to your PATH:\n  export PATH="%s:$PATH"\n' "$INSTALL_DIR" "$INSTALL_DIR"
+            ;;
     esac
 
     printf '\n'

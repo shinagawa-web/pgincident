@@ -158,3 +158,13 @@ jobs:
           out=$("${{ runner.temp }}/pgincident-bin-pinned/pgincident" --version)
           echo "$out"
           echo "$out" | grep -q "0.5.1"
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run shellcheck
+        run: shellcheck --shell=sh install.sh
