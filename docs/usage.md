@@ -1,5 +1,7 @@
 # Usage
 
+![pgincident demo](demo.gif)
+
 ## Installation
 
 See the [Installation section in the README](../README.md#installation) for Homebrew, one-line installer, binary download, and build-from-source options.

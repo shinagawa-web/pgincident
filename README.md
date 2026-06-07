@@ -9,6 +9,8 @@ Production Postgres is slow. You open psql and start firing queries — `pg_stat
 
 **pgincident** collapses that into a live TUI: a global health overview to spot the problem, then a per-category incident dashboard to dig in.
 
+![pgincident demo](docs/demo.gif)
+
 → **[Usage guide](docs/usage.md)** — startup, screens, key bindings
 
 ## Installation
