@@ -1,0 +1,12 @@
+baseURL = "https://shinagawa-web.github.io/pgincident/"
+locale = "en-us"
+title = "pgincident"
+
+[module]
+  [[module.imports]]
+    path = "github.com/alex-shpak/hugo-book"
+
+[params]
+  BookRepo    = "https://github.com/shinagawa-web/pgincident"
+  BookSection = "/"
+  BookSearch  = false
