@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/shinagawa-web/pgincident/actions/workflows/ci.yml/badge.svg)](https://github.com/shinagawa-web/pgincident/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/shinagawa-web/pgincident/branch/main/graph/badge.svg)](https://codecov.io/gh/shinagawa-web/pgincident)
+[![Documentation](https://img.shields.io/badge/docs-shinagawa--web.github.io-blue)](https://shinagawa-web.github.io/pgincident/)
 
 > "The first 30 seconds of a Postgres incident — in one terminal."
 
